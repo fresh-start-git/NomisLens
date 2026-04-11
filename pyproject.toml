@@ -1,0 +1,8 @@
+# Ultimate Zoom — minimal pyproject.toml for Phase 1.
+# Purpose: make pytest importable against the src-layout package.
+# Phase 8 will extend this with a full [project] table for pip install -e .
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-ra"

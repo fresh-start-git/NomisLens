@@ -25,7 +25,7 @@ class StateSnapshot:
     w: int = 400
     h: int = 400
     zoom: float = 2.0
-    shape: Shape = "circle"
+    shape: Shape = "rect"
     visible: bool = True
     always_on_top: bool = True
 

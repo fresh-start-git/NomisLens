@@ -14,7 +14,7 @@ def test_default_snapshot():
     assert snap.w == 400
     assert snap.h == 400
     assert snap.zoom == 2.0
-    assert snap.shape == "circle"
+    assert snap.shape == "rect"
     assert snap.visible is True
     assert snap.always_on_top is True
 

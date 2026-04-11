@@ -44,8 +44,13 @@ HTTRANSPARENT = -1
 HTBOTTOMRIGHT = 17  # reserved for Phase 4 resize grip
 
 # Window messages.
+WM_MOUSEACTIVATE = 0x0021
 WM_NCHITTEST     = 0x0084
 WM_NCLBUTTONDOWN = 0x00A1
 WM_MOUSEMOVE     = 0x0200
 WM_LBUTTONDOWN   = 0x0201
 WM_DESTROY       = 0x0002
+
+# WM_MOUSEACTIVATE return codes (winuser.h).
+# MA_NOACTIVATE: don't activate the window, but pass the click through.
+MA_NOACTIVATE = 3

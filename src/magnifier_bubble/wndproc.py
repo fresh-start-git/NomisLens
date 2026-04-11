@@ -109,6 +109,12 @@ def install(
     old_proc = u32.GetWindowLongPtrW(hwnd, wc.GWLP_WNDPROC)
 
     def py_wndproc(h, msg, wparam, lparam):
+        if msg == wc.WM_MOUSEACTIVATE:
+            # Prevent the parent window from stealing focus on any click.
+            # WM_MOUSEACTIVATE fires before WM_NCHITTEST, so this must be
+            # handled here — returning MA_NOACTIVATE keeps the foreground
+            # window (e.g. Notepad) unchanged regardless of which zone was hit.
+            return wc.MA_NOACTIVATE
         if msg == wc.WM_NCHITTEST:
             # lParam packs SCREEN-space coordinates as two 16-bit shorts.
             # Use signed c_short cast — the unsigned word-extraction macros
@@ -145,6 +151,69 @@ def install(
 
     u32.SetWindowLongPtrW(
         hwnd, wc.GWLP_WNDPROC,
+        ctypes.cast(new_proc, ctypes.c_void_p).value,
+    )
+    return ka
+
+
+def install_child(
+    child_hwnd: int,
+    compute_zone_fn: Callable[[int, int, int, int], str],
+) -> WndProcKeepalive:
+    """Subclass the canvas child HWND to fix click-through and focus theft.
+
+    The parent WndProc installed by install() never receives WM_NCHITTEST
+    when the cursor is over the canvas child, because Windows delivers
+    WM_NCHITTEST to the topmost HWND at the cursor — which is the child.
+    Tkinter's default canvas WndProc returns HTCLIENT for everything, so
+    HTTRANSPARENT never fires and clicks never reach apps below.
+
+    This child WndProc:
+    - WM_MOUSEACTIVATE → MA_NOACTIVATE: belt-and-suspenders against focus
+      steal (the parent WndProc also handles this via propagation, but
+      intercepting it here prevents Tk's canvas WndProc from processing it
+      first and potentially activating the window).
+    - WM_NCHITTEST content zone → HTTRANSPARENT: click passes to parent
+      WndProc, which also returns HTTRANSPARENT, so the click reaches the
+      app below (e.g. Notepad).
+    - WM_NCHITTEST drag/control zone → delegates to original Tk canvas
+      WndProc (returns HTCLIENT), so Tkinter fires <Button-1> and Pattern
+      2b (ReleaseCapture + SendMessage WM_NCLBUTTONDOWN) initiates the move.
+    """
+    u32 = _u32()
+    old_proc = u32.GetWindowLongPtrW(child_hwnd, wc.GWLP_WNDPROC)
+
+    def py_child_wndproc(h, msg, wparam, lparam):
+        if msg == wc.WM_MOUSEACTIVATE:
+            return wc.MA_NOACTIVATE
+        if msg == wc.WM_NCHITTEST:
+            sx = ctypes.c_short(lparam & 0xFFFF).value
+            sy = ctypes.c_short((lparam >> 16) & 0xFFFF).value
+            rect = wintypes.RECT()
+            u32.GetWindowRect(h, ctypes.byref(rect))
+            cx = sx - rect.left
+            cy = sy - rect.top
+            w = rect.right - rect.left
+            wh = rect.bottom - rect.top
+            try:
+                zone = compute_zone_fn(cx, cy, w, wh)
+            except Exception:
+                zone = "content"
+            if zone == "content":
+                return wc.HTTRANSPARENT
+            # drag/control: let Tk's original canvas WndProc handle it
+            # (returns HTCLIENT → Tk fires <Button-1> → Pattern 2b drag).
+        return u32.CallWindowProcW(old_proc, h, msg, wparam, lparam)
+
+    new_proc = WNDPROC(py_child_wndproc)
+
+    ka = WndProcKeepalive()
+    ka.new_proc = new_proc
+    ka.old_proc = old_proc
+    ka.hwnd = child_hwnd
+
+    u32.SetWindowLongPtrW(
+        child_hwnd, wc.GWLP_WNDPROC,
         ctypes.cast(new_proc, ctypes.c_void_p).value,
     )
     return ka

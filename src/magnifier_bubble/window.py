@@ -95,6 +95,8 @@ class BubbleWindow:
     def __init__(self, state: AppState) -> None:
         self.state: AppState = state
         self._wndproc_keepalive: wndproc.WndProcKeepalive | None = None
+        self._canvas_wndproc_keepalive: wndproc.WndProcKeepalive | None = None
+        self._frame_wndproc_keepalive: wndproc.WndProcKeepalive | None = None
 
         snap = state.snapshot()
 
@@ -154,12 +156,38 @@ class BubbleWindow:
         # handles the SetWindowRgn clip separately.
         self._border_id: int = self._draw_border(snap.w, snap.h, snap.shape)
 
-        # --- Step 10: Install WndProc subclass with a compute_zone wrapper ---
-        # The wrapper closes over `self` so it can read the CURRENT window
-        # size on every hit test (Phase 4 resize won't break anything).
+        # --- Step 9b: Realize canvas HWND before WndProc installation ---
+        # The canvas is created in Step 9 but winfo_id() may return 0 until
+        # Tk processes pending geometry events. update_idletasks() flushes
+        # those so self._canvas.winfo_id() is valid below.
+        self.root.update_idletasks()
+
+        # --- Step 10: Install WndProc subclasses ---
+        # Windows delivers WM_NCHITTEST to the topmost HWND at the cursor.
+        # Tk creates three Win32 windows that stack as follows (outermost first):
+        #   self._hwnd  (Win32 toplevel)
+        #     self.root.winfo_id()  (Tk frame child)
+        #       self._canvas.winfo_id()  (canvas widget, topmost at cursor)
+        #
+        # For content-zone click-through, every window in the chain must return
+        # HTTRANSPARENT — otherwise the first one that returns HTCLIENT captures
+        # the click and Notepad never sees it.  For drag, only the canvas matters:
+        # it falls through to Tk's original proc (HTCLIENT → <Button-1> → Pattern 2b).
+        # For focus theft, WM_MOUSEACTIVATE is intercepted at the canvas level
+        # (MA_NOACTIVATE) before Tk's WndProc can activate the window.
         if sys.platform == "win32" and self._hwnd:
             self._wndproc_keepalive = wndproc.install(
                 self._hwnd, self._zone_fn
+            )
+            # Tk frame: intermediate HWND — must also return HTTRANSPARENT for
+            # content zone so the chain reaches self._hwnd's cross-process pass.
+            self._frame_wndproc_keepalive = wndproc.install_child(
+                self.root.winfo_id(), self._zone_fn
+            )
+            # Canvas: actual topmost HWND at cursor — intercept WM_NCHITTEST
+            # first; drag zone falls through to Tk's WndProc (HTCLIENT → <Button-1>).
+            self._canvas_wndproc_keepalive = wndproc.install_child(
+                self._canvas.winfo_id(), self._zone_fn
             )
 
         # --- Step 11: Apply shape mask (SetWindowRgn clips corners) ---
@@ -229,6 +257,14 @@ class BubbleWindow:
         a still-valid HWND.
         """
         try:
+            # Uninstall innermost WndProcs first (canvas → frame → parent)
+            # so each HWND's chain is restored while all HWNDs are still valid.
+            if self._canvas_wndproc_keepalive is not None:
+                wndproc.uninstall(self._canvas_wndproc_keepalive)
+                self._canvas_wndproc_keepalive = None
+            if self._frame_wndproc_keepalive is not None:
+                wndproc.uninstall(self._frame_wndproc_keepalive)
+                self._frame_wndproc_keepalive = None
             if self._wndproc_keepalive is not None:
                 wndproc.uninstall(self._wndproc_keepalive)
                 self._wndproc_keepalive = None

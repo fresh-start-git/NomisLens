@@ -11,7 +11,7 @@
 - [ ] **OVER-02**: Window has no title bar or standard OS chrome (overrideredirect)
 - [ ] **OVER-03**: Window is a layered window (WS_EX_LAYERED) to enable per-pixel transparency and click-through
 - [ ] **OVER-04**: Window never steals focus from Cornerstone or any other app (WS_EX_NOACTIVATE)
-- [ ] **OVER-05**: DPI awareness set as first line of main.py (SetProcessDpiAwarenessContext Per-Monitor-V2) before any imports
+- [x] **OVER-05**: DPI awareness set as first line of main.py (SetProcessDpiAwarenessContext Per-Monitor-V2) before any imports
 
 ### Capture
 
@@ -113,7 +113,7 @@
 | OVER-02 | Phase 2 | Pending |
 | OVER-03 | Phase 2 | Pending |
 | OVER-04 | Phase 2 | Pending |
-| OVER-05 | Phase 1 | Pending |
+| OVER-05 | Phase 1 | Complete |
 | CAPT-01 | Phase 3 | Pending |
 | CAPT-02 | Phase 3 | Pending |
 | CAPT-03 | Phase 3 | Pending |

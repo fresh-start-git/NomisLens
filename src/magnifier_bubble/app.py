@@ -1,39 +1,48 @@
-"""Ultimate Zoom — Phase 1 entry point.
+"""Ultimate Zoom - Phase 2 entry point.
 
-This is the first phase — there is no Tk mainloop yet. The Phase 1 job is
-to prove that the DPI-first main.py shim successfully:
-  1. Set Per-Monitor-V2 DPI awareness (verified by dpi.debug_print).
-  2. Constructed an AppState (verified by a round-trip set+snapshot).
-  3. Exited cleanly with code 0.
+Replaces the Phase 1 scaffold body: we now construct a BubbleWindow and
+drive the Tk mainloop. main.py's first-line DPI call (OVER-05) is still
+the caller; this file does NOT touch DPI.
 
-Later phases replace this body: Phase 2 creates the bubble window here,
-Phase 3 kicks off the capture thread, Phase 6 registers the hotkey, etc.
+Smoke test escape hatch: if ULTIMATE_ZOOM_SMOKE=1 is set in the
+environment, we schedule root.after(50, bubble.destroy) so the process
+exits cleanly within ~100 ms. This keeps the Phase 1 test_main_entry.py
+subprocess smoke tests runnable without a human having to close the
+window. The normal interactive path (no env var) runs mainloop until
+the user closes the bubble.
 """
 from __future__ import annotations
 
+import os
+
 from magnifier_bubble import dpi
 from magnifier_bubble.state import AppState, StateSnapshot
+from magnifier_bubble.window import BubbleWindow
 
 
 def main() -> int:
-    # Phase 1 Criterion 5: observable proof that DPI awareness worked.
+    # Observable proof that PMv2 survived the Phase 2 Tk + ctypes imports.
     dpi.debug_print()
 
-    # Phase 1 Criterion 4: AppState is the single source of truth.
+    # Phase 1 criterion 4: AppState is still the single source of truth.
     state = AppState(StateSnapshot())
 
-    # Smoke: mutate then snapshot to prove the container round-trips.
-    state.set_position(300, 400)
-    snap = state.snapshot()
+    # Phase 2: create the bubble and drive the Tk event loop.
+    bubble = BubbleWindow(state)
     print(
-        f"[state] snapshot after set_position(300,400): "
-        f"x={snap.x} y={snap.y} w={snap.w} h={snap.h} "
-        f"zoom={snap.zoom} shape={snap.shape} "
-        f"visible={snap.visible} always_on_top={snap.always_on_top}"
+        f"[bubble] hwnd={bubble._hwnd} "
+        f"geometry={state.snapshot().w}x{state.snapshot().h}"
+        f"+{state.snapshot().x}+{state.snapshot().y} "
+        f"shape={state.snapshot().shape}"
     )
 
-    # Phase 1 has no mainloop — scaffold only. Exit cleanly.
-    print("[app] phase 1 scaffold OK; exiting")
+    if os.environ.get("ULTIMATE_ZOOM_SMOKE") == "1":
+        # Non-interactive smoke: tear down after 50 ms so the subprocess
+        # exits cleanly for CI / test_main_entry.py.
+        bubble.root.after(50, bubble.destroy)
+
+    bubble.root.mainloop()
+    print("[app] phase 2 mainloop exited; goodbye")
     return 0
 
 

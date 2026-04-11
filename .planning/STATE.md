@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-stopped_at: Completed 01-03-PLAN.md (main.py + app.main + OVER-05 smoke); Phase 01 foundation-dpi COMPLETE
-last_updated: "2026-04-11T17:51:08.082Z"
+status: in_progress
+stopped_at: Completed 02-01-PLAN.md (winconst + hit_test pure-Python foundation); Phase 02 plan 2/3 next
+last_updated: "2026-04-11T22:34:54Z"
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 6
+  completed_plans: 4
 ---
 
 # Project State
@@ -19,33 +19,34 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Clicks and touches pass through the magnified content area to whatever app is underneath — the bubble enhances vision without blocking the workflow.
-**Current focus:** Phase 01 — foundation-dpi
+**Current focus:** Phase 02 — overlay-window
 
 ## Current Position
 
-Phase: 01 (foundation-dpi) — COMPLETE
-Plan: 3 of 3 (complete)
-Last completed: 01-03 (main.py + app.main + OVER-05 smoke) — 2026-04-11
-Next: Phase 02 — bubble-window (planning not started)
+**Phase:** 02 (overlay-window) — EXECUTING
+**Current Plan:** 2
+**Total Plans in Phase:** 3
+**Last Completed Plan:** 02-01 (winconst + hit_test pure-Python foundation)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 3
-- Average duration: 5 min
-- Total execution time: 0.25 hours
+- Total plans completed: 4
+- Average duration: 4.75 min
+- Total execution time: 0.32 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation-dpi | 3 | 15 min | 5 min |
+| 02-overlay-window | 1 | 4 min | 4 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 (3 min), 01-02 (3 min), 01-03 (9 min)
-- Trend: plan-03 took longer due to two Rule 1 x64 ctypes HANDLE bug fixes discovered during execution
+- Last 5 plans: 01-01 (3 min), 01-02 (3 min), 01-03 (9 min), 02-01 (4 min)
+- Trend: Phase 02 pure-Python plan 01 finished in 4 min with 2 Rule 1 test-code bug fixes (PEP 563 signature, docstring ast skip)
 
 *Updated after each plan completion*
 
@@ -56,6 +57,7 @@ Next: Phase 02 — bubble-window (planning not started)
 | Phase 01-foundation-dpi P01 | 3 min | 3 | 8 |
 | Phase 01-foundation-dpi P02 | 3 min | 2 | 4 |
 | Phase 01-foundation-dpi P03 | 9min | 3 tasks | 4 files |
+| Phase 02-overlay-window P01 | 4 min | 2 (TDD) | 4 |
 
 ## Accumulated Context
 
@@ -77,6 +79,12 @@ Recent decisions affecting current work:
 - [Phase 01-foundation-dpi]: [Phase 01-foundation-dpi/03]: main.py is byte-for-byte literal except for line 2 argtypes setup; ctypes.windll.user32.SetProcessDpiAwarenessContext.argtypes = [c_void_p] is required for the DPI call to actually succeed on 64-bit Python (Rule 1 bug fix — default ctypes c_int truncates the HANDLE sentinel on x64)
 - [Phase 01-foundation-dpi]: [Phase 01-foundation-dpi/03]: dpi._u32() now applies wintypes argtypes/restype on first access (guarded by _SIGNATURES_APPLIED) so GetThreadDpiAwarenessContext and AreDpiAwarenessContextsEqual see full-width HANDLEs on x64 — without this is_pmv2_active() returned False even after a successful PMv2 set
 - [Phase 01-foundation-dpi]: [Phase 01-foundation-dpi/03]: test_main_entry.py uses scan-based discovery of the DPI try/except plus an explicit forbidden-imports-before-DPI ordering test, rather than a hard tree.body[1] index check — catches real Phase 3 regressions (e.g. accidental import mss in main.py) while tolerating the required argtypes setup line
+- [Phase 02-overlay-window/01]: hit_test.py intentionally does NOT import winconst.py — the string->HT* bridge (drag->HTCAPTION, content->HTTRANSPARENT, control->HTCLIENT) lives in Plan 02's wndproc.py so compute_zone stays pure and CI-testable on non-Windows
+- [Phase 02-overlay-window/01]: DRAG_BAR_HEIGHT = CONTROL_BAR_HEIGHT = 44 locked as hit_test.py module constants (CTRL-09 finger touch target) — Phase 4 resize grip will consume these, not hardcode
+- [Phase 02-overlay-window/01]: compute_zone overlap rule: on tiny h<88 windows the drag band is tested first and wins; out-of-bounds returns "content" so WndProc produces HTTRANSPARENT and clicks pass through the SetWindowRgn-clipped corners
+- [Phase 02-overlay-window/01]: winconst.py is pure constants (no functions/classes/imports beyond `from __future__ import annotations`) — tested by ast.walk lint. WS_EX_TRANSPARENT included as a DO-NOT-USE sentinel per PITFALLS.md Pitfall 1
+- [Phase 02-overlay-window/01]: [Rule 1 bug fix] test_compute_zone_signature uses `inspect.signature(compute_zone, eval_str=True)` because `from __future__ import annotations` (PEP 563) makes sig.return_annotation the string "str", not the str type — without eval_str the plan-supplied test would never pass on any module with postponed annotations
+- [Phase 02-overlay-window/01]: [Rule 1 bug fix] test_winconst_body_is_only_constants_and_future_import skips `ast.Expr(Constant(str))` docstring nodes before asserting the allowlist (ImportFrom + Assign) — verbatim plan code would have rejected the module docstring on body[0]
 
 ### Pending Todos
 
@@ -93,8 +101,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-11T17:45:36.445Z
-Stopped at: Completed 01-03-PLAN.md (main.py + app.main + OVER-05 smoke); Phase 01 foundation-dpi COMPLETE
+Last session: 2026-04-11T22:34:54Z
+Stopped at: Completed 02-01-PLAN.md (winconst + hit_test pure-Python foundation); Phase 02 plan 2/3 next
 Resume file: None
 
-Next step: `/gsd:plan-phase 2` (start Phase 02 — bubble-window planning)
+Next step: `/gsd:execute-plan 02 02` (execute Plan 02-02 — wndproc.py WndProc subclass bridging hit_test strings to HT* constants)

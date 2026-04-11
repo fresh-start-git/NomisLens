@@ -24,9 +24,9 @@
 
 ### Layout
 
-- [ ] **LAYT-01**: Window has three horizontal zones: drag handle (top), magnified content (middle), controls (bottom)
-- [ ] **LAYT-02**: Middle content zone is 100% click-through — all mouse and touch input passes through to underlying app (WM_NCHITTEST → HTTRANSPARENT for middle zone)
-- [ ] **LAYT-03**: Top drag bar and bottom control strip capture mouse/touch input normally
+- [x] **LAYT-01**: Window has three horizontal zones: drag handle (top), magnified content (middle), controls (bottom)
+- [x] **LAYT-02**: Middle content zone is 100% click-through — all mouse and touch input passes through to underlying app (WM_NCHITTEST → HTTRANSPARENT for middle zone)
+- [x] **LAYT-03**: Top drag bar and bottom control strip capture mouse/touch input normally
 - [ ] **LAYT-04**: WndProc subclassed via SetWindowLongPtrW + GWLP_WNDPROC; callback stored on instance to prevent GC crash
 - [ ] **LAYT-05**: Top and bottom strips are semi-transparent dark overlay (rgba 0,0,0 ~180 alpha)
 - [ ] **LAYT-06**: Teal/soft-blue border (3–4px) visible around the bubble on any background
@@ -120,9 +120,9 @@
 | CAPT-04 | Phase 3 | Pending |
 | CAPT-05 | Phase 3 | Pending |
 | CAPT-06 | Phase 3 | Pending |
-| LAYT-01 | Phase 2 | Pending |
-| LAYT-02 | Phase 2 | Pending |
-| LAYT-03 | Phase 2 | Pending |
+| LAYT-01 | Phase 2 | Complete |
+| LAYT-02 | Phase 2 | Complete |
+| LAYT-03 | Phase 2 | Complete |
 | LAYT-04 | Phase 2 | Pending |
 | LAYT-05 | Phase 2 | Pending |
 | LAYT-06 | Phase 2 | Pending |

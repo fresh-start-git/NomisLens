@@ -49,13 +49,44 @@ class DpiReport(TypedDict):
     context_is_pmv2: bool
 
 
+_SIGNATURES_APPLIED = False
+
+
 def _u32():
     """Lazy access to user32 — avoids any side effects at module import.
 
     On non-Windows, ctypes.windll does not exist and accessing it would
     raise AttributeError. All callers of _u32() guard with sys.platform.
+
+    On first use, applies argtypes/restype to the functions we call so
+    that 64-bit Python passes DPI_AWARENESS_CONTEXT handles correctly
+    (the sentinel values -1..-5 must be sign-extended to pointer size).
+    Without this, the default c_int ABI truncates the handle on x64 and
+    AreDpiAwarenessContextsEqual silently returns 0 (bug found Phase 1 P3).
     """
-    return ctypes.windll.user32  # type: ignore[attr-defined]
+    u32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    global _SIGNATURES_APPLIED
+    if not _SIGNATURES_APPLIED:
+        try:
+            from ctypes import wintypes
+            u32.GetThreadDpiAwarenessContext.argtypes = []
+            u32.GetThreadDpiAwarenessContext.restype = wintypes.HANDLE
+            u32.AreDpiAwarenessContextsEqual.argtypes = [
+                wintypes.HANDLE, wintypes.HANDLE
+            ]
+            u32.AreDpiAwarenessContextsEqual.restype = wintypes.BOOL
+            u32.GetDpiForSystem.argtypes = []
+            u32.GetDpiForSystem.restype = wintypes.UINT
+            u32.GetSystemMetrics.argtypes = [wintypes.INT]
+            u32.GetSystemMetrics.restype = wintypes.INT
+            u32.GetSystemMetricsForDpi.argtypes = [wintypes.INT, wintypes.UINT]
+            u32.GetSystemMetricsForDpi.restype = wintypes.INT
+            _SIGNATURES_APPLIED = True
+        except (AttributeError, OSError):
+            # Older Windows without per-monitor DPI APIs — leave signatures
+            # unset so callers fall through their except guards.
+            pass
+    return u32
 
 
 def is_pmv2_active() -> bool:
@@ -67,11 +98,13 @@ def is_pmv2_active() -> bool:
     if sys.platform != "win32":
         return False
     try:
+        from ctypes import wintypes
         u32 = _u32()
         cur = u32.GetThreadDpiAwarenessContext()
-        # AreDpiAwarenessContextsEqual takes two handles; we cast -4 to handle.
+        # AreDpiAwarenessContextsEqual takes two HANDLE args; wrap -4 in a
+        # HANDLE so x64 sign-extends it to pointer width.
         return bool(u32.AreDpiAwarenessContextsEqual(
-            cur, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+            cur, wintypes.HANDLE(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
         ))
     except (AttributeError, OSError):
         return False

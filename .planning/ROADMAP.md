@@ -33,7 +33,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A pinned `requirements.txt` exists and `pip install -r requirements.txt` succeeds in a clean venv
   4. An `AppState` object holds position, size, zoom, shape, and visible fields and is the only place those values are mutated
   5. Running the app on a 150%-scaled display reports logical and physical screen dimensions that match Windows' actual values (verified via a debug print)
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 01-PLAN.md — Project scaffold: requirements.txt, pyproject.toml, package+tests skeleton
+- [ ] 02-PLAN.md — TDD AppState container + DPI helper module
+- [ ] 03-PLAN.md — Root main.py shim (OVER-05 first-line DPI) + app.py entry + entry-point tests
 
 ### Phase 2: Overlay Window
 **Goal**: Put a shaped, always-on-top, click-through empty bubble on screen that can be dragged by its top strip and never steals focus from Cornerstone — the hardest Win32 work in the project, delivering the first visible milestone.
@@ -127,7 +130,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation + DPI | 0/TBD | Not started | - |
+| 1. Foundation + DPI | 0/3 | Not started | - |
 | 2. Overlay Window | 0/TBD | Not started | - |
 | 3. Capture Loop | 0/TBD | Not started | - |
 | 4. Controls, Shape, Resize | 0/TBD | Not started | - |

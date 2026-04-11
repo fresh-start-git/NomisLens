@@ -33,9 +33,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A pinned `requirements.txt` exists and `pip install -r requirements.txt` succeeds in a clean venv
   4. An `AppState` object holds position, size, zoom, shape, and visible fields and is the only place those values are mutated
   5. Running the app on a 150%-scaled display reports logical and physical screen dimensions that match Windows' actual values (verified via a debug print)
-**Plans**: 3 plans (1/3 complete)
+**Plans**: 3 plans (2/3 complete)
 - [x] 01-PLAN.md — Project scaffold: requirements.txt, pyproject.toml, package+tests skeleton (completed 2026-04-11, see 01-01-SUMMARY.md)
-- [ ] 02-PLAN.md — TDD AppState container + DPI helper module
+- [x] 02-PLAN.md — TDD AppState container + DPI helper module (completed 2026-04-11, see 01-02-SUMMARY.md)
 - [ ] 03-PLAN.md — Root main.py shim (OVER-05 first-line DPI) + app.py entry + entry-point tests
 
 ### Phase 2: Overlay Window

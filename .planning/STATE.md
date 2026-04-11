@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Completed 01-02-PLAN.md (state + dpi); next: 01-03 app.py + main.py"
-last_updated: "2026-04-11T17:30:04.133Z"
+stopped_at: Completed 01-03-PLAN.md (main.py + app.main + OVER-05 smoke); Phase 01 foundation-dpi COMPLETE
+last_updated: "2026-04-11T17:45:36.450Z"
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -23,28 +23,29 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 
 ## Current Position
 
-Phase: 01 (foundation-dpi) — EXECUTING
-Plan: 3 of 3
-Last completed: 01-02 (state + dpi) — 2026-04-11
+Phase: 01 (foundation-dpi) — COMPLETE
+Plan: 3 of 3 (complete)
+Last completed: 01-03 (main.py + app.main + OVER-05 smoke) — 2026-04-11
+Next: Phase 02 — bubble-window (planning not started)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 2
-- Average duration: 3 min
-- Total execution time: 0.10 hours
+- Total plans completed: 3
+- Average duration: 5 min
+- Total execution time: 0.25 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation-dpi | 2 | 6 min | 3 min |
+| 01-foundation-dpi | 3 | 15 min | 5 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 (3 min), 01-02 (3 min)
-- Trend: flat (both plans 3 min)
+- Last 5 plans: 01-01 (3 min), 01-02 (3 min), 01-03 (9 min)
+- Trend: plan-03 took longer due to two Rule 1 x64 ctypes HANDLE bug fixes discovered during execution
 
 *Updated after each plan completion*
 
@@ -54,6 +55,7 @@ Last completed: 01-02 (state + dpi) — 2026-04-11
 |------|----------|-------|-------|
 | Phase 01-foundation-dpi P01 | 3 min | 3 | 8 |
 | Phase 01-foundation-dpi P02 | 3 min | 2 | 4 |
+| Phase 01-foundation-dpi P03 | 9min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -72,6 +74,9 @@ Recent decisions affecting current work:
 - [Phase 01-foundation-dpi/02]: AppState uses threading.Lock (not RLock); observer notifications fire AFTER releasing lock; snapshot() returns deep copy via dataclasses.asdict round-trip
 - [Phase 01-foundation-dpi/02]: dpi.py has zero import-time side effects; lazy _u32() accessor + is_pmv2_active() guarded by sys.platform + try/except; SetProcessDpiAwarenessContext(-4) is main.py's job (Pattern 1), NEVER called from dpi.py
 - [Phase 01-foundation-dpi/02]: is_pmv2_active() uses AreDpiAwarenessContextsEqual (not pointer identity) per research Pattern 3
+- [Phase 01-foundation-dpi]: [Phase 01-foundation-dpi/03]: main.py is byte-for-byte literal except for line 2 argtypes setup; ctypes.windll.user32.SetProcessDpiAwarenessContext.argtypes = [c_void_p] is required for the DPI call to actually succeed on 64-bit Python (Rule 1 bug fix — default ctypes c_int truncates the HANDLE sentinel on x64)
+- [Phase 01-foundation-dpi]: [Phase 01-foundation-dpi/03]: dpi._u32() now applies wintypes argtypes/restype on first access (guarded by _SIGNATURES_APPLIED) so GetThreadDpiAwarenessContext and AreDpiAwarenessContextsEqual see full-width HANDLEs on x64 — without this is_pmv2_active() returned False even after a successful PMv2 set
+- [Phase 01-foundation-dpi]: [Phase 01-foundation-dpi/03]: test_main_entry.py uses scan-based discovery of the DPI try/except plus an explicit forbidden-imports-before-DPI ordering test, rather than a hard tree.body[1] index check — catches real Phase 3 regressions (e.g. accidental import mss in main.py) while tolerating the required argtypes setup line
 
 ### Pending Todos
 
@@ -88,8 +93,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-11T17:30:04.128Z
-Stopped at: Completed 01-02-PLAN.md (state + dpi); next: 01-03 app.py + main.py
+Last session: 2026-04-11T17:45:36.445Z
+Stopped at: Completed 01-03-PLAN.md (main.py + app.main + OVER-05 smoke); Phase 01 foundation-dpi COMPLETE
 Resume file: None
 
-Next step: `/gsd:execute-phase 1` (resume at Plan 03: app.py + main.py)
+Next step: `/gsd:plan-phase 2` (start Phase 02 — bubble-window planning)

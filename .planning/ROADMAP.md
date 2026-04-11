@@ -12,7 +12,7 @@ Ultimate Zoom is a floating, click-through, always-on-top magnifier bubble for a
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation + DPI** - Project scaffold, AppState container, DPI awareness set as first line of main.py
+- [x] **Phase 1: Foundation + DPI** - Project scaffold, AppState container, DPI awareness set as first line of main.py (completed 2026-04-11)
 - [ ] **Phase 2: Overlay Window** - Shaped, draggable, click-through, non-focus-stealing empty bubble on screen
 - [ ] **Phase 3: Capture Loop** - Live magnified pixels rendered inside the bubble at 30 fps with no memory leak
 - [ ] **Phase 4: Controls, Shape, Resize** - Zoom buttons, shape cycling, resize grip, touch-sized hit targets
@@ -33,10 +33,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A pinned `requirements.txt` exists and `pip install -r requirements.txt` succeeds in a clean venv
   4. An `AppState` object holds position, size, zoom, shape, and visible fields and is the only place those values are mutated
   5. Running the app on a 150%-scaled display reports logical and physical screen dimensions that match Windows' actual values (verified via a debug print)
-**Plans**: 3 plans (2/3 complete)
+**Plans**: 3 plans (3/3 complete)
 - [x] 01-PLAN.md — Project scaffold: requirements.txt, pyproject.toml, package+tests skeleton (completed 2026-04-11, see 01-01-SUMMARY.md)
 - [x] 02-PLAN.md — TDD AppState container + DPI helper module (completed 2026-04-11, see 01-02-SUMMARY.md)
-- [ ] 03-PLAN.md — Root main.py shim (OVER-05 first-line DPI) + app.py entry + entry-point tests
+- [x] 03-PLAN.md — Root main.py shim (OVER-05 first-line DPI) + app.py entry + entry-point tests (completed 2026-04-11, see 01-03-SUMMARY.md)
 
 ### Phase 2: Overlay Window
 **Goal**: Put a shaped, always-on-top, click-through empty bubble on screen that can be dragged by its top strip and never steals focus from Cornerstone — the hardest Win32 work in the project, delivering the first visible milestone.
@@ -130,7 +130,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation + DPI | 0/3 | Not started | - |
+| 1. Foundation + DPI | 3/3 | Complete | 2026-04-11 |
 | 2. Overlay Window | 0/TBD | Not started | - |
 | 3. Capture Loop | 0/TBD | Not started | - |
 | 4. Controls, Shape, Resize | 0/TBD | Not started | - |

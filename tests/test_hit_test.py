@@ -97,7 +97,9 @@ def test_control_strip_returns_control():
 # ---- Signature lock (Plan 02 wndproc.py depends on this exact signature) ----
 
 def test_compute_zone_signature():
-    sig = inspect.signature(compute_zone)
+    # eval_str=True resolves PEP 563 string annotations (from __future__ import annotations)
+    # to their real class objects, so sig.return_annotation is `str`, not the literal 'str'.
+    sig = inspect.signature(compute_zone, eval_str=True)
     params = list(sig.parameters.keys())
     assert params == ["client_x", "client_y", "w", "h"], (
         f"compute_zone params are {params}; Plan 02's wndproc.py expects "

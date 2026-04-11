@@ -106,81 +106,53 @@ def test_source_defers_win32gui_import_to_call_time():
 win_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
 
 
-def _make_tk_root_and_hwnd(w: int = 400, h: int = 400):
-    import tkinter as tk
-    root = tk.Tk()
-    root.withdraw()
-    root.geometry(f"{w}x{h}+200+200")
-    root.update_idletasks()
-    u32 = ctypes.windll.user32
-    u32.GetParent.argtypes = [ctypes.wintypes.HWND]
-    u32.GetParent.restype = ctypes.wintypes.HWND
-    hwnd = u32.GetParent(root.winfo_id())
-    return root, hwnd
+@win_only
+def test_apply_shape_circle_does_not_raise(tk_toplevel):
+    top, hwnd = tk_toplevel
+    shapes.apply_shape(hwnd, 400, 400, "circle")
 
 
 @win_only
-def test_apply_shape_circle_does_not_raise():
-    root, hwnd = _make_tk_root_and_hwnd()
-    try:
-        shapes.apply_shape(hwnd, 400, 400, "circle")
-    finally:
-        root.destroy()
+def test_apply_shape_rounded_does_not_raise(tk_toplevel):
+    top, hwnd = tk_toplevel
+    shapes.apply_shape(hwnd, 400, 400, "rounded")
 
 
 @win_only
-def test_apply_shape_rounded_does_not_raise():
-    root, hwnd = _make_tk_root_and_hwnd()
-    try:
-        shapes.apply_shape(hwnd, 400, 400, "rounded")
-    finally:
-        root.destroy()
+def test_apply_shape_rect_does_not_raise(tk_toplevel):
+    top, hwnd = tk_toplevel
+    shapes.apply_shape(hwnd, 400, 400, "rect")
 
 
 @win_only
-def test_apply_shape_rect_does_not_raise():
-    root, hwnd = _make_tk_root_and_hwnd()
-    try:
-        shapes.apply_shape(hwnd, 400, 400, "rect")
-    finally:
-        root.destroy()
-
-
-@win_only
-def test_apply_shape_50_cycle_no_double_free():
+def test_apply_shape_50_cycle_no_double_free(tk_toplevel):
     """Pitfall F stress test: cycling 50 times must NOT crash the process.
     If apply_shape incorrectly DeleteObject'd a successful HRGN, the second
     or third call would double-free and ACCESS_VIOLATION the interpreter."""
-    root, hwnd = _make_tk_root_and_hwnd()
-    try:
-        cycle = ("circle", "rounded", "rect")
-        for i in range(50):
-            shape = cycle[i % 3]
-            shapes.apply_shape(hwnd, 400, 400, shape)
-        # After 50 iterations, the hwnd must still be valid.
-        u32 = ctypes.windll.user32
-        u32.GetWindowRect.argtypes = [
-            ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.RECT)
-        ]
-        u32.GetWindowRect.restype = ctypes.wintypes.BOOL
-        rect = ctypes.wintypes.RECT()
-        ok = u32.GetWindowRect(hwnd, ctypes.byref(rect))
-        assert ok, "hwnd is no longer valid after 50 apply_shape cycles"
-    finally:
-        root.destroy()
+    top, hwnd = tk_toplevel
+    cycle = ("circle", "rounded", "rect")
+    for i in range(50):
+        shape = cycle[i % 3]
+        shapes.apply_shape(hwnd, 400, 400, shape)
+    # After 50 iterations, the hwnd must still be valid.
+    u32 = ctypes.windll.user32
+    u32.GetWindowRect.argtypes = [
+        ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.RECT)
+    ]
+    u32.GetWindowRect.restype = ctypes.wintypes.BOOL
+    rect = ctypes.wintypes.RECT()
+    ok = u32.GetWindowRect(hwnd, ctypes.byref(rect))
+    assert ok, "hwnd is no longer valid after 50 apply_shape cycles"
 
 
 @win_only
-def test_apply_shape_varies_dimensions_no_crash():
+def test_apply_shape_varies_dimensions_no_crash(tk_toplevel):
     """Phase 4 will call apply_shape on every resize — the smoke test
     uses 10 different (w, h) pairs to simulate that path."""
-    root, hwnd = _make_tk_root_and_hwnd()
-    try:
-        sizes = [(150, 150), (200, 300), (300, 200), (400, 400), (500, 500),
-                 (600, 400), (400, 600), (700, 700), (250, 400), (400, 250)]
-        for w, h in sizes:
-            shapes.apply_shape(hwnd, w, h, "circle")
-            shapes.apply_shape(hwnd, w, h, "rounded")
-            shapes.apply_shape(hwnd, w, h, "rect")
-    finally:
-        root.destroy()
+    top, hwnd = tk_toplevel
+    sizes = [(150, 150), (200, 300), (300, 200), (400, 400), (500, 500),
+             (600, 400), (400, 600), (700, 700), (250, 400), (400, 250)]
+    for w, h in sizes:
+        shapes.apply_shape(hwnd, w, h, "circle")
+        shapes.apply_shape(hwnd, w, h, "rounded")
+        shapes.apply_shape(hwnd, w, h, "rect")

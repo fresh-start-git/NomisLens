@@ -105,21 +105,6 @@ def test_source_does_not_import_tkinter_or_mss_or_pil():
 win_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
 
 
-def _make_tk_root_and_hwnd():
-    """Helper: creates a hidden Tk root and returns (root, toplevel_hwnd).
-    Toplevel HWND is GetParent(winfo_id()) — winfo_id is the child HWND."""
-    import tkinter as tk  # local import so non-Windows CI never touches Tk
-    root = tk.Tk()
-    root.withdraw()
-    root.geometry("400x400+200+200")
-    root.update_idletasks()
-    u32 = ctypes.windll.user32
-    u32.GetParent.argtypes = [ctypes.wintypes.HWND]
-    u32.GetParent.restype = ctypes.wintypes.HWND
-    hwnd = u32.GetParent(root.winfo_id())
-    return root, hwnd
-
-
 def _pack_lparam_screen_point(x: int, y: int) -> int:
     """Pack two 16-bit signed shorts into a LPARAM, matching WM_NCHITTEST."""
     # lParam low word = x, high word = y — both as signed 16-bit
@@ -127,28 +112,27 @@ def _pack_lparam_screen_point(x: int, y: int) -> int:
 
 
 @win_only
-def test_install_returns_keepalive_with_populated_fields():
-    root, hwnd = _make_tk_root_and_hwnd()
+def test_install_returns_keepalive_with_populated_fields(tk_toplevel):
+    top, hwnd = tk_toplevel
+    ka = wndproc.install(hwnd, lambda cx, cy, w, h: "content")
     try:
-        ka = wndproc.install(hwnd, lambda cx, cy, w, h: "content")
         assert ka is not None
         assert ka.hwnd == hwnd
         assert ka.new_proc is not None
         assert ka.old_proc is not None
-        wndproc.uninstall(ka)
     finally:
-        root.destroy()
+        wndproc.uninstall(ka)
 
 
 @win_only
-def test_wndproc_returns_htcaption_for_drag_zone():
+def test_wndproc_returns_htcaption_for_drag_zone(tk_toplevel):
     """Synthetic WM_NCHITTEST at top-center of window -> zone='drag' -> HTCAPTION."""
-    root, hwnd = _make_tk_root_and_hwnd()
+    top, hwnd = tk_toplevel
+    ka = wndproc.install(
+        hwnd,
+        lambda cx, cy, w, h: "drag" if cy < 44 else "content",
+    )
     try:
-        ka = wndproc.install(
-            hwnd,
-            lambda cx, cy, w, h: "drag" if cy < 44 else "content",
-        )
         u32 = ctypes.windll.user32
         u32.SendMessageW.argtypes = [
             ctypes.wintypes.HWND, ctypes.wintypes.UINT,
@@ -161,17 +145,16 @@ def test_wndproc_returns_htcaption_for_drag_zone():
         assert result == wc.HTCAPTION, (
             f"expected HTCAPTION ({wc.HTCAPTION}) for drag zone, got {result}"
         )
-        wndproc.uninstall(ka)
     finally:
-        root.destroy()
+        wndproc.uninstall(ka)
 
 
 @win_only
-def test_wndproc_returns_httransparent_for_middle():
+def test_wndproc_returns_httransparent_for_middle(tk_toplevel):
     """Synthetic WM_NCHITTEST at window center -> zone='content' -> HTTRANSPARENT."""
-    root, hwnd = _make_tk_root_and_hwnd()
+    top, hwnd = tk_toplevel
+    ka = wndproc.install(hwnd, lambda cx, cy, w, h: "content")
     try:
-        ka = wndproc.install(hwnd, lambda cx, cy, w, h: "content")
         u32 = ctypes.windll.user32
         u32.SendMessageW.argtypes = [
             ctypes.wintypes.HWND, ctypes.wintypes.UINT,
@@ -183,17 +166,16 @@ def test_wndproc_returns_httransparent_for_middle():
         assert result == wc.HTTRANSPARENT, (
             f"expected HTTRANSPARENT ({wc.HTTRANSPARENT}) for content zone, got {result}"
         )
-        wndproc.uninstall(ka)
     finally:
-        root.destroy()
+        wndproc.uninstall(ka)
 
 
 @win_only
-def test_wndproc_delegates_control_zone_to_default_proc():
+def test_wndproc_delegates_control_zone_to_default_proc(tk_toplevel):
     """Synthetic WM_NCHITTEST for 'control' zone -> CallWindowProcW default -> HTCLIENT."""
-    root, hwnd = _make_tk_root_and_hwnd()
+    top, hwnd = tk_toplevel
+    ka = wndproc.install(hwnd, lambda cx, cy, w, h: "control")
     try:
-        ka = wndproc.install(hwnd, lambda cx, cy, w, h: "control")
         u32 = ctypes.windll.user32
         u32.SendMessageW.argtypes = [
             ctypes.wintypes.HWND, ctypes.wintypes.UINT,
@@ -214,20 +196,19 @@ def test_wndproc_delegates_control_zone_to_default_proc():
         assert result != wc.HTTRANSPARENT, (
             f"control zone should delegate, not return HTTRANSPARENT"
         )
-        wndproc.uninstall(ka)
     finally:
-        root.destroy()
+        wndproc.uninstall(ka)
 
 
 @win_only
-def test_wndproc_survives_50_messages_no_gc_crash():
+def test_wndproc_survives_50_messages_no_gc_crash(tk_toplevel):
     """Pitfall A: 50 consecutive messages must not crash the process.
     If the keepalive is missing, CPython GCs the WNDPROC thunk and the
     second or third SendMessageW crashes with ACCESS_VIOLATION."""
     import gc
-    root, hwnd = _make_tk_root_and_hwnd()
+    top, hwnd = tk_toplevel
+    ka = wndproc.install(hwnd, lambda cx, cy, w, h: "content")
     try:
-        ka = wndproc.install(hwnd, lambda cx, cy, w, h: "content")
         u32 = ctypes.windll.user32
         u32.SendMessageW.argtypes = [
             ctypes.wintypes.HWND, ctypes.wintypes.UINT,
@@ -246,30 +227,26 @@ def test_wndproc_survives_50_messages_no_gc_crash():
         # Still alive and keepalive still holding references
         assert ka.new_proc is not None
         assert ka.old_proc is not None
-        wndproc.uninstall(ka)
     finally:
-        root.destroy()
+        wndproc.uninstall(ka)
 
 
 @win_only
-def test_uninstall_restores_original_proc():
+def test_uninstall_restores_original_proc(tk_toplevel):
     """uninstall() must call SetWindowLongPtrW with the saved old_proc address."""
-    root, hwnd = _make_tk_root_and_hwnd()
-    try:
-        u32 = ctypes.windll.user32
-        u32.GetWindowLongPtrW.argtypes = [ctypes.wintypes.HWND, ctypes.c_int]
-        u32.GetWindowLongPtrW.restype = ctypes.c_void_p
-        original = u32.GetWindowLongPtrW(hwnd, wc.GWLP_WNDPROC)
+    top, hwnd = tk_toplevel
+    u32 = ctypes.windll.user32
+    u32.GetWindowLongPtrW.argtypes = [ctypes.wintypes.HWND, ctypes.c_int]
+    u32.GetWindowLongPtrW.restype = ctypes.c_void_p
+    original = u32.GetWindowLongPtrW(hwnd, wc.GWLP_WNDPROC)
 
-        ka = wndproc.install(hwnd, lambda cx, cy, w, h: "content")
-        after_install = u32.GetWindowLongPtrW(hwnd, wc.GWLP_WNDPROC)
-        assert after_install != original, "install did not replace the proc"
+    ka = wndproc.install(hwnd, lambda cx, cy, w, h: "content")
+    after_install = u32.GetWindowLongPtrW(hwnd, wc.GWLP_WNDPROC)
+    assert after_install != original, "install did not replace the proc"
 
-        wndproc.uninstall(ka)
-        after_uninstall = u32.GetWindowLongPtrW(hwnd, wc.GWLP_WNDPROC)
-        assert after_uninstall == original, (
-            f"uninstall did not restore original proc: "
-            f"expected {original}, got {after_uninstall}"
-        )
-    finally:
-        root.destroy()
+    wndproc.uninstall(ka)
+    after_uninstall = u32.GetWindowLongPtrW(hwnd, wc.GWLP_WNDPROC)
+    assert after_uninstall == original, (
+        f"uninstall did not restore original proc: "
+        f"expected {original}, got {after_uninstall}"
+    )

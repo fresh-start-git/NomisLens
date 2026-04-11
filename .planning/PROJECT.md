@@ -12,7 +12,9 @@ Clicks and touches pass through the magnified content area to whatever app is un
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] requirements.txt with pinned versions — *Validated in Phase 1: Foundation + DPI*
+- [x] DPI-correct foundation: `SetProcessDpiAwarenessContext(-4)` as first executable line of main.py — *Validated in Phase 1: Foundation + DPI*
+- [x] AppState container as single source of truth for position, size, zoom, shape, visible — *Validated in Phase 1: Foundation + DPI*
 
 ### Active
 
@@ -71,4 +73,4 @@ Clicks and touches pass through the magnified content area to whatever app is un
 | config.json in app directory | Predictable location, easy for non-technical staff to find/reset | — Pending |
 
 ---
-*Last updated: 2026-04-10 after initialization*
+*Last updated: 2026-04-11 — Phase 1 (Foundation + DPI) complete*

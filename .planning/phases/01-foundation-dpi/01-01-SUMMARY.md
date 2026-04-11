@@ -86,7 +86,7 @@ Each task was committed atomically:
 2. **Task 2: Create pyproject.toml + .gitignore** - `1d976a4` (chore)
 3. **Task 3: Create package + tests skeleton directories** - `338e644` (chore)
 
-**Plan metadata:** _pending — final docs commit below_
+**Plan metadata:** `81432e3` (docs: complete project-scaffold plan)
 
 ## Files Created/Modified
 

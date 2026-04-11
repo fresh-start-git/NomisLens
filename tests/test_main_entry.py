@@ -167,12 +167,21 @@ def test_main_py_delegates_to_magnifier_bubble_app_main():
 
 @pytest.mark.skipif(sys.platform != "win32", reason="DPI API is Windows-only")
 def test_main_py_runs_and_exits_zero():
-    """python main.py must exit 0 and print the three expected log lines."""
+    """python main.py must exit 0 and print the Phase 2 observable log lines.
+
+    Phase 2 note: app.main now constructs a BubbleWindow and calls
+    bubble.root.mainloop(). We pass ULTIMATE_ZOOM_SMOKE=1 so app.main
+    schedules a 50 ms auto-destroy, letting the subprocess exit cleanly
+    within the 10-second timeout.
+    """
+    import os as _os
+    env = {**_os.environ, "ULTIMATE_ZOOM_SMOKE": "1"}
     result = subprocess.run(
         [sys.executable, str(MAIN_PY)],
         capture_output=True,
         text=True,
         cwd=str(REPO_ROOT),
+        env=env,
         timeout=10,
     )
     assert result.returncode == 0, (
@@ -180,22 +189,26 @@ def test_main_py_runs_and_exits_zero():
     )
     out = result.stdout
     assert "[dpi] pmv2=" in out, f"missing [dpi] line in stdout:\n{out}"
-    assert "[state] snapshot after set_position(300,400)" in out, (
-        f"missing [state] line in stdout:\n{out}"
+    # Phase 2 observable: the bubble logs its hwnd + geometry before mainloop.
+    assert "[bubble] hwnd=" in out, (
+        f"missing Phase 2 [bubble] line in stdout:\n{out}"
     )
-    assert "[app] phase 1 scaffold OK" in out, (
-        f"missing [app] scaffold line in stdout:\n{out}"
+    assert "[app] phase 2 mainloop exited" in out, (
+        f"missing Phase 2 [app] exit line in stdout:\n{out}"
     )
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="DPI API is Windows-only")
 def test_main_py_dpi_line_contains_physical_dimensions():
     """VALIDATION.md grep hook: stdout must contain physical=<w>x<h>."""
+    import os as _os
+    env = {**_os.environ, "ULTIMATE_ZOOM_SMOKE": "1"}
     result = subprocess.run(
         [sys.executable, str(MAIN_PY)],
         capture_output=True,
         text=True,
         cwd=str(REPO_ROOT),
+        env=env,
         timeout=10,
     )
     assert result.returncode == 0

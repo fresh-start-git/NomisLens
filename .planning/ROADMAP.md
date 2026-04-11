@@ -49,7 +49,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Clicking the bubble while Cornerstone has focus does not steal focus from Cornerstone (Cornerstone cursor/typing continues uninterrupted)
   5. The bubble has visible top/bottom semi-transparent dark strips and a 3–4px teal border that are legible against both light and dark backgrounds
   6. WndProc subclassing is installed via `SetWindowLongPtrW` with the callback stored on the instance, and the app runs for at least 5 minutes of interaction without a GC crash
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 02-01-PLAN.md — winconst.py + hit_test.py (pure-Python foundation; locks string zone contract "drag"/"content"/"control" + Win32 sentinel constants; covers LAYT-01, LAYT-02, LAYT-03)
+- [ ] 02-02-PLAN.md — wndproc.py + shapes.py (Windows-only WndProc subclass with keepalive + SetWindowRgn wrapper; 50-message GC smoke test for Pitfall A; 50-cycle HRGN smoke test for Pitfall F; covers OVER-03, LAYT-02, LAYT-03, LAYT-04)
+- [ ] 02-03-PLAN.md — BubbleWindow + app.py rewrite + manual checkpoint (wires canonical Pattern 1 constructor ordering, Pattern 2b live-drag workaround, visible strips + teal border, ULTIMATE_ZOOM_SMOKE escape hatch for subprocess tests; ends with 7-check human verification on Windows dev box; covers OVER-01, OVER-02, OVER-03, OVER-04, LAYT-01, LAYT-04, LAYT-05, LAYT-06)
 
 ### Phase 3: Capture Loop
 **Goal**: Fill the middle zone with live, magnified pixels of whatever is under the bubble at 30 fps minimum, using mss + BILINEAR resampling, without the Windows PhotoImage memory leak.
@@ -131,7 +134,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation + DPI | 3/3 | Complete | 2026-04-11 |
-| 2. Overlay Window | 0/TBD | Not started | - |
+| 2. Overlay Window | 0/3 | Planned | - |
 | 3. Capture Loop | 0/TBD | Not started | - |
 | 4. Controls, Shape, Resize | 0/TBD | Not started | - |
 | 5. Config Persistence | 0/TBD | Not started | - |

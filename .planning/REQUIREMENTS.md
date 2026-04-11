@@ -9,7 +9,7 @@
 
 - [ ] **OVER-01**: App window is always-on-top and has no taskbar presence (WS_EX_TOOLWINDOW)
 - [ ] **OVER-02**: Window has no title bar or standard OS chrome (overrideredirect)
-- [ ] **OVER-03**: Window is a layered window (WS_EX_LAYERED) to enable per-pixel transparency and click-through
+- [x] **OVER-03**: Window is a layered window (WS_EX_LAYERED) to enable per-pixel transparency and click-through
 - [ ] **OVER-04**: Window never steals focus from Cornerstone or any other app (WS_EX_NOACTIVATE)
 - [x] **OVER-05**: DPI awareness set as first line of main.py (SetProcessDpiAwarenessContext Per-Monitor-V2) before any imports
 
@@ -27,7 +27,7 @@
 - [x] **LAYT-01**: Window has three horizontal zones: drag handle (top), magnified content (middle), controls (bottom)
 - [x] **LAYT-02**: Middle content zone is 100% click-through — all mouse and touch input passes through to underlying app (WM_NCHITTEST → HTTRANSPARENT for middle zone)
 - [x] **LAYT-03**: Top drag bar and bottom control strip capture mouse/touch input normally
-- [ ] **LAYT-04**: WndProc subclassed via SetWindowLongPtrW + GWLP_WNDPROC; callback stored on instance to prevent GC crash
+- [x] **LAYT-04**: WndProc subclassed via SetWindowLongPtrW + GWLP_WNDPROC; callback stored on instance to prevent GC crash
 - [ ] **LAYT-05**: Top and bottom strips are semi-transparent dark overlay (rgba 0,0,0 ~180 alpha)
 - [ ] **LAYT-06**: Teal/soft-blue border (3–4px) visible around the bubble on any background
 
@@ -111,7 +111,7 @@
 |-------------|-------|--------|
 | OVER-01 | Phase 2 | Pending |
 | OVER-02 | Phase 2 | Pending |
-| OVER-03 | Phase 2 | Pending |
+| OVER-03 | Phase 2 | Complete |
 | OVER-04 | Phase 2 | Pending |
 | OVER-05 | Phase 1 | Complete |
 | CAPT-01 | Phase 3 | Pending |
@@ -123,7 +123,7 @@
 | LAYT-01 | Phase 2 | Complete |
 | LAYT-02 | Phase 2 | Complete |
 | LAYT-03 | Phase 2 | Complete |
-| LAYT-04 | Phase 2 | Pending |
+| LAYT-04 | Phase 2 | Complete |
 | LAYT-05 | Phase 2 | Pending |
 | LAYT-06 | Phase 2 | Pending |
 | CTRL-01 | Phase 4 | Pending |

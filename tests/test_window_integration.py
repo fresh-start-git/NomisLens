@@ -56,22 +56,31 @@ def test_visual_constants_locked():
 
 
 def test_source_contains_canonical_ordering():
-    """Grep-level check that the constructor steps appear in the right order."""
+    """Grep-level check that the constructor steps appear in the right order.
+
+    Each marker is chosen to match the CALL SITE inside __init__, not the
+    argtypes-binding references inside the _u32() helper. That lets us lint
+    the canonical Pattern 1 construction order without false positives from
+    ctypes signature setup that has to appear earlier in the module for
+    function-scope name resolution to work.
+    """
     src = WINDOW_PATH.read_text(encoding="utf-8")
-    # Find the position of each marker
+    # Find the position of each marker - each marker is a call-site literal
+    # that only occurs once in __init__, so src.find() (first occurrence)
+    # always points at the constructor call, not the _u32() argtypes setup.
     markers = [
-        "tk.Tk(",
-        ".withdraw()",
-        "overrideredirect(True)",
-        'wm_attributes("-topmost", True)',
-        ".geometry(",
-        "update_idletasks()",
-        "GetParent(self.root.winfo_id()",
-        "SetWindowLongW",
-        "SetLayeredWindowAttributes",
-        "wndproc.install",
-        "shapes.apply_shape",
-        ".deiconify()",
+        "tk.Tk = tk.Tk(",
+        "self.root.withdraw()",
+        "self.root.overrideredirect(True)",
+        'self.root.wm_attributes("-topmost", True)',
+        "self.root.geometry(",
+        "self.root.update_idletasks()",
+        "u32.GetParent(self.root.winfo_id()",
+        "u32.SetWindowLongW(self._hwnd",
+        "u32.SetLayeredWindowAttributes(self._hwnd",
+        "wndproc.install(",
+        "shapes.apply_shape(self._hwnd",
+        "self.root.deiconify()",
     ]
     positions = [src.find(m) for m in markers]
     for m, pos in zip(markers, positions):
@@ -155,8 +164,17 @@ def test_source_has_pattern_2b_drag_workaround():
 win_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def bubble():
+    """One BubbleWindow per test module to avoid the Python 3.14 + tk 8.6
+    'SourceLibFile panedwindow' TclError that fires when tk.Tk() is torn
+    down and recreated inside the same pytest process. STATE.md Phase 02/02
+    decisions section documents the underlying flakiness; scope=module
+    keeps this fixture's tk.Tk() calls to exactly one per module, which
+    eliminates the race for all read-only tests. The write-path smoke
+    (test_destroy_cleans_up_wndproc_then_root) is ordered LAST in the
+    module so it only runs a second tk.Tk() after every other test has
+    finished consuming the shared bubble."""
     if sys.platform != "win32":
         pytest.skip("Windows-only")
     state = AppState(StateSnapshot(x=200, y=200, w=400, h=400, shape="circle"))
@@ -280,14 +298,18 @@ def test_wndproc_hit_test_returns_httransparent_at_center(bubble):
 
 
 @win_only
-def test_destroy_cleans_up_wndproc_then_root():
-    """destroy must uninstall the WndProc subclass BEFORE destroying the root."""
-    state = AppState(StateSnapshot())
-    bw = BubbleWindow(state)
-    bw.root.update_idletasks()
-    assert bw._wndproc_keepalive is not None
-    bw.destroy()
+def test_destroy_cleans_up_wndproc_then_root(bubble):
+    """destroy must uninstall the WndProc subclass BEFORE destroying the root.
+
+    NOTE: this test MUST be declared LAST in the module because it destroys
+    the shared module-scoped `bubble` fixture. Running any bubble-consuming
+    test after this one would hit an already-destroyed Tk root. pytest runs
+    tests in declaration order by default, so this ordering is preserved as
+    long as nothing is re-ordered by markers / plugins.
+    """
+    assert bubble._wndproc_keepalive is not None
+    bubble.destroy()
     # After destroy, the keepalive should be cleared and calling destroy
     # again should be a no-op (no exception).
-    assert bw._wndproc_keepalive is None
-    bw.destroy()
+    assert bubble._wndproc_keepalive is None
+    bubble.destroy()

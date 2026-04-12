@@ -15,10 +15,10 @@
 
 ### Capture
 
-- [ ] **CAPT-01**: App captures screen pixels directly beneath the bubble at real screen coordinates using mss
-- [ ] **CAPT-02**: Capture runs at 30 fps minimum (33 ms/frame budget)
-- [ ] **CAPT-03**: PIL.ImageGrab is NOT used in the main capture loop (mss only)
-- [ ] **CAPT-04**: Captured pixels are magnified using Pillow BILINEAR resampling and rendered inside the bubble
+- [x] **CAPT-01**: App captures screen pixels directly beneath the bubble at real screen coordinates using mss
+- [x] **CAPT-02**: Capture runs at 30 fps minimum (33 ms/frame budget)
+- [x] **CAPT-03**: PIL.ImageGrab is NOT used in the main capture loop (mss only)
+- [x] **CAPT-04**: Captured pixels are magnified using Pillow BILINEAR resampling and rendered inside the bubble
 - [ ] **CAPT-05**: Per-frame rendering reuses a single ImageTk.PhotoImage via paste() to avoid Windows memory leak (CPython issue 124364)
 - [ ] **CAPT-06**: Capture correctly handles the bubble's own screen position (no hall-of-mirrors; WS_EX_LAYERED excludes the window from BitBlt by default)
 
@@ -114,10 +114,10 @@
 | OVER-03 | Phase 2 | Complete |
 | OVER-04 | Phase 2 | Complete |
 | OVER-05 | Phase 1 | Complete |
-| CAPT-01 | Phase 3 | Pending |
-| CAPT-02 | Phase 3 | Pending |
-| CAPT-03 | Phase 3 | Pending |
-| CAPT-04 | Phase 3 | Pending |
+| CAPT-01 | Phase 3 | Complete |
+| CAPT-02 | Phase 3 | Complete |
+| CAPT-03 | Phase 3 | Complete |
+| CAPT-04 | Phase 3 | Complete |
 | CAPT-05 | Phase 3 | Pending |
 | CAPT-06 | Phase 3 | Pending |
 | LAYT-01 | Phase 2 | Complete |

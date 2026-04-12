@@ -2,15 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: 3
 status: unknown
-stopped_at: Completed 02-03-PLAN.md (BubbleWindow Tk+Win32 integration + manual verification); Phase 02 complete
-last_updated: "2026-04-12T00:07:06.095Z"
+stopped_at: Completed 03-01-PLAN.md (CaptureWorker producer thread + 14 structural tests)
+last_updated: "2026-04-12T11:35:27.576Z"
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 8
+  completed_plans: 7
 ---
 
 # Project State
@@ -20,14 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Clicks and touches pass through the magnified content area to whatever app is underneath — the bubble enhances vision without blocking the workflow.
-**Current focus:** Phase 02 — overlay-window
+**Current focus:** Phase 03 — capture-loop
 
 ## Current Position
 
-**Phase:** 02 (overlay-window) — EXECUTING
-**Current Plan:** 3
-**Total Plans in Phase:** 3
-**Last Completed Plan:** 02-01 (winconst + hit_test pure-Python foundation)
+Phase: 03 (capture-loop) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -61,6 +58,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 | Phase 02-overlay-window P01 | 4 min | 2 (TDD) | 4 |
 | Phase 02-overlay-window P02 | 9 min | 2 tasks | 5 files |
 | Phase 02-overlay-window P03 | 65 | 3 tasks | 7 files |
+| Phase 03 P01 | 8 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -98,6 +96,9 @@ Recent decisions affecting current work:
 - [Phase 02-overlay-window]: Check 6 click-through gap deferred to Phase 4 — coordinate-translated WM_LBUTTONDOWN injection is the correct mechanism for a zoom app; raw HTTRANSPARENT blocked by Tk frame cross-process propagation
 - [Phase 02-overlay-window]: [Phase 02-overlay-window/03]: install_child() added to wndproc.py for child HWND subclassing (canvas + frame); MA_NOACTIVATE via WM_MOUSEACTIVATE intercept at both parent and child WndProcs
 - [Phase 02-overlay-window]: [Phase 02-overlay-window/03]: default shape changed to 'rect' in StateSnapshot — circle HRGN ill-defined before Phase 4 shape selector; rect gives unambiguous full-border visual
+- [Phase 03]: Bumped Pillow pin from 11.3.0 to 12.1.1 -- Python 3.14.3 dev box has Pillow 12.1.1 installed; 11.3.0 has no cp314 wheel
+- [Phase 03]: mss 10.1.0 confirmed importable on Python 3.14.3 (pure-Python py3-none-any wheel)
+- [Phase 03]: CAPTUREBLT=0 hall-of-mirrors Path B defense set inside run() before mss.mss() construction
 
 ### Pending Todos
 
@@ -114,8 +115,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-12T00:07:06.091Z
-Stopped at: Completed 02-03-PLAN.md (BubbleWindow Tk+Win32 integration + manual verification); Phase 02 complete
+Last session: 2026-04-12T11:35:27.572Z
+Stopped at: Completed 03-01-PLAN.md (CaptureWorker producer thread + 14 structural tests)
 Resume file: None
 
 Next step: `/gsd:execute-plan 02 02` (execute Plan 02-02 — wndproc.py WndProc subclass bridging hit_test strings to HT* constants)

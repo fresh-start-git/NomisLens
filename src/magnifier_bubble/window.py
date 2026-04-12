@@ -36,8 +36,11 @@ import tkinter as tk
 from ctypes import wintypes
 from typing import Callable
 
+from PIL import ImageTk
+
 from magnifier_bubble import shapes, wndproc
 from magnifier_bubble import winconst as wc
+from magnifier_bubble.capture import CaptureWorker
 from magnifier_bubble.hit_test import compute_zone
 from magnifier_bubble.state import AppState
 
@@ -188,6 +191,29 @@ class BubbleWindow:
         # those so self._canvas.winfo_id() is valid below.
         self.root.update_idletasks()
 
+        # --- Step 9b bis (Phase 3): single ImageTk.PhotoImage + canvas image item ---
+        # CAPT-05: one PhotoImage, reused every frame via paste() (not
+        # reassigned). Rebuilt only on bubble resize via _on_frame's
+        # size-mismatch path (Phase 4 will drive that).
+        # CPython issue 124364 defense: NEVER create ImageTk.PhotoImage
+        # in the hot loop.
+        content_w = snap.w
+        content_h = snap.h - DRAG_STRIP_HEIGHT - CONTROL_STRIP_HEIGHT
+        self._photo: ImageTk.PhotoImage = ImageTk.PhotoImage(
+            "RGB", (content_w, content_h)
+        )
+        self._photo_size: tuple[int, int] = (content_w, content_h)
+        # Z-order: image item created LAST among the content-zone items
+        # sits ABOVE the canvas background. tag_lower pushes it below the
+        # strips and border items so the magnified pixels peek out
+        # from the middle zone only.
+        self._image_id: int = self._canvas.create_image(
+            0, DRAG_STRIP_HEIGHT,
+            image=self._photo,
+            anchor="nw",
+        )
+        self._canvas.tag_lower(self._image_id)
+
         # --- Step 10: Install WndProc subclasses ---
         # Windows delivers WM_NCHITTEST to the topmost HWND at the cursor.
         # Tk creates three Win32 windows that stack as follows (outermost first):
@@ -235,6 +261,9 @@ class BubbleWindow:
         # --- Step 12: Show the window ---
         self.root.deiconify()
 
+        # Phase 3: capture worker placeholder (started by app.py via start_capture)
+        self._capture_worker: CaptureWorker | None = None
+
     # ---- Internal helpers ----
 
     def _zone_fn(self, client_x: int, client_y: int, w: int, h: int) -> str:
@@ -275,6 +304,34 @@ class BubbleWindow:
         u32.ReleaseCapture()
         u32.SendMessageW(self._hwnd, wc.WM_NCLBUTTONDOWN, wc.HTCAPTION, 0)
 
+    # ---- Phase 3: capture consumer ----
+
+    def _on_frame(self, img) -> None:
+        """Runs on the Tk main thread (via root.after(0, ...)).
+        Paste the pre-resized PIL.Image into the single reused
+        PhotoImage. Rebuild the PhotoImage only if the bubble has
+        been resized since the last frame (Phase 4 will drive this
+        path via state.set_size)."""
+        if img.size != self._photo_size:
+            self._photo = ImageTk.PhotoImage("RGB", img.size)
+            self._photo_size = img.size
+            self._canvas.itemconfig(self._image_id, image=self._photo)
+        self._photo.paste(img)
+
+    def start_capture(self) -> None:
+        """Create and start the CaptureWorker producer thread.
+        Called from app.main() after BubbleWindow construction
+        returns. Safe to call more than once (no-op on re-call)."""
+        if self._capture_worker is not None:
+            return
+        self._capture_worker = CaptureWorker(
+            state=self.state,
+            on_frame=lambda img: self.root.after(
+                0, self._on_frame, img
+            ),
+        )
+        self._capture_worker.start()
+
     # ---- Public teardown ----
 
     def destroy(self) -> None:
@@ -283,6 +340,13 @@ class BubbleWindow:
         a still-valid HWND.
         """
         try:
+            # Phase 3: stop the capture worker BEFORE tearing down
+            # root / WndProc chain so the worker can't fire one last
+            # frame onto a dead canvas.
+            if self._capture_worker is not None:
+                self._capture_worker.stop()
+                self._capture_worker.join(timeout=1.0)
+                self._capture_worker = None
             # Uninstall innermost WndProcs first (canvas → frame → parent)
             # so each HWND's chain is restored while all HWNDs are still valid.
             if self._canvas_wndproc_keepalive is not None:

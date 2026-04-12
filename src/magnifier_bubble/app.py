@@ -36,6 +36,14 @@ def main() -> int:
         f"shape={state.snapshot().shape}"
     )
 
+    # Phase 3: start the 30 fps capture producer thread.
+    # (Does nothing on non-Windows because CaptureWorker.run()'s
+    # `import mss` will fail — we gate by sys.platform to avoid a
+    # confusing ModuleNotFoundError on CI / non-Windows dev machines.)
+    import sys as _sys
+    if _sys.platform == "win32":
+        bubble.start_capture()
+
     if os.environ.get("ULTIMATE_ZOOM_SMOKE") == "1":
         # Non-interactive smoke: tear down after 50 ms so the subprocess
         # exits cleanly for CI / test_main_entry.py.

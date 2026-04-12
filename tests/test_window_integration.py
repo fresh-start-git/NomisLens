@@ -297,15 +297,69 @@ def test_wndproc_hit_test_returns_httransparent_at_center(bubble):
     )
 
 
+# --- Phase 3 additions (bubble-consuming tests BEFORE destroy) ---
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
+def test_set_window_display_affinity(bubble):
+    """CAPT-06 Path A: SetWindowDisplayAffinity was called."""
+    from ctypes import wintypes, byref
+    u32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    u32.GetWindowDisplayAffinity.argtypes = [
+        wintypes.HWND, ctypes.POINTER(wintypes.DWORD)
+    ]
+    u32.GetWindowDisplayAffinity.restype = wintypes.BOOL
+    affinity = wintypes.DWORD()
+    assert u32.GetWindowDisplayAffinity(
+        wintypes.HWND(bubble._hwnd), byref(affinity)
+    )
+    # 0x11 = WDA_EXCLUDEFROMCAPTURE (Win10 2004+), 0x01 = WDA_MONITOR
+    # fallback on older Windows. 0x00 = WDA_NONE = call failed.
+    assert affinity.value in (0x01, 0x11), (
+        f"unexpected display affinity: {affinity.value:#x}"
+    )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
+def test_photo_attribute_exists(bubble):
+    """CAPT-05: BubbleWindow has a single ImageTk.PhotoImage."""
+    from PIL import ImageTk
+    assert isinstance(bubble._photo, ImageTk.PhotoImage)
+    assert bubble._photo_size == (
+        bubble._photo.width(), bubble._photo.height()
+    )
+    # Content zone = bubble - top strip - bottom strip
+    from magnifier_bubble.window import (
+        DRAG_STRIP_HEIGHT, CONTROL_STRIP_HEIGHT,
+    )
+    snap = bubble.state.snapshot()
+    assert bubble._photo.width() == snap.w
+    assert bubble._photo.height() == (
+        snap.h - DRAG_STRIP_HEIGHT - CONTROL_STRIP_HEIGHT
+    )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
+def test_image_id_is_valid_canvas_item(bubble):
+    """CAPT-04 wiring: _image_id is a live Canvas item id."""
+    assert bubble._image_id in bubble._canvas.find_all()
+    # Item type is "image" (not rectangle, oval, etc.)
+    assert bubble._canvas.type(bubble._image_id) == "image"
+
+
+# --- Shared-bubble destructive test (MUST be LAST bubble consumer) ---
+
 @win_only
 def test_destroy_cleans_up_wndproc_then_root(bubble):
     """destroy must uninstall the WndProc subclass BEFORE destroying the root.
 
-    NOTE: this test MUST be declared LAST in the module because it destroys
-    the shared module-scoped `bubble` fixture. Running any bubble-consuming
-    test after this one would hit an already-destroyed Tk root. pytest runs
-    tests in declaration order by default, so this ordering is preserved as
-    long as nothing is re-ordered by markers / plugins.
+    NOTE: this test MUST be declared LAST among the shared-bubble tests
+    because it destroys the module-scoped `bubble` fixture. Running any
+    bubble-consuming test after this one would hit an already-destroyed
+    Tk root. pytest runs tests in declaration order by default, so this
+    ordering is preserved as long as nothing is re-ordered by markers / plugins.
+
+    The Phase 3 lifecycle test below uses a DEDICATED `bubble_lifecycle`
+    fixture and is safe to run after this one.
     """
     assert bubble._wndproc_keepalive is not None
     bubble.destroy()
@@ -313,3 +367,75 @@ def test_destroy_cleans_up_wndproc_then_root(bubble):
     # again should be a no-op (no exception).
     assert bubble._wndproc_keepalive is None
     bubble.destroy()
+
+
+# --- Phase 3 structural lints (no bubble fixture needed) ---
+
+def test_photoimage_constructed_exactly_twice_in_window():
+    """CAPT-05 Pitfall 12 lint: only two ImageTk.PhotoImage(
+    call sites in window.py (initial build + resize rebuild)."""
+    src = pathlib.Path(window_mod.__file__).read_text(encoding="utf-8")
+    count = src.count("ImageTk.PhotoImage(")
+    assert count == 2, (
+        f"ImageTk.PhotoImage( appears {count} times in window.py; "
+        f"expected exactly 2 (initial build in __init__ + resize "
+        f"rebuild in _on_frame). More than 2 means CPython 124364 "
+        f"leak defense is broken."
+    )
+
+
+def test_on_frame_uses_paste_not_reassign():
+    """CAPT-05 lint: _on_frame must use self._photo.paste(img)."""
+    src = pathlib.Path(window_mod.__file__).read_text(encoding="utf-8")
+    assert "self._photo.paste(" in src, (
+        "_on_frame must call self._photo.paste(img) per CAPT-05"
+    )
+
+
+@pytest.fixture
+def bubble_lifecycle():
+    """Per-test bubble for the lifecycle test, which calls destroy()
+    inside the test body. CANNOT share the module-level `bubble`
+    fixture because that fixture calls destroy() in its teardown —
+    calling destroy() twice raises TclError and Tk "can't invoke
+    "destroy" command" errors. This fixture intentionally does NOT
+    call destroy() in teardown — the test body is responsible."""
+    from magnifier_bubble.state import AppState, StateSnapshot
+    from magnifier_bubble.window import BubbleWindow
+    state = AppState(StateSnapshot())
+    b = BubbleWindow(state)
+    yield b
+    # Safety net: if the test aborted before destroy(), clean up now
+    try:
+        if getattr(b, "_capture_worker", None) is not None:
+            b._capture_worker.stop()
+            b._capture_worker.join(timeout=1.0)
+        b.root.destroy()
+    except Exception:
+        pass  # already torn down by the test body
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
+def test_capture_worker_lifecycle(bubble_lifecycle):
+    """CAPT-01: start_capture creates a live worker; destroy stops it.
+    Uses bubble_lifecycle (isolated per-test fixture) — NOT the shared
+    `bubble` fixture — because this test calls bubble.destroy() in its
+    body, and double-destroy raises TclError in the shared fixture's
+    teardown."""
+    import time
+    bubble = bubble_lifecycle
+    assert bubble._capture_worker is None
+    bubble.start_capture()
+    assert bubble._capture_worker is not None
+    assert bubble._capture_worker.is_alive()
+    # Calling start twice is a no-op
+    first = bubble._capture_worker
+    bubble.start_capture()
+    assert bubble._capture_worker is first
+    # Let one frame try to arrive
+    bubble.root.update()
+    time.sleep(0.05)
+    bubble.root.update()
+    # destroy() must stop the worker
+    bubble.destroy()
+    assert bubble._capture_worker is None

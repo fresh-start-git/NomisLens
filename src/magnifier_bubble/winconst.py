@@ -54,3 +54,12 @@ WM_DESTROY       = 0x0002
 # WM_MOUSEACTIVATE return codes (winuser.h).
 # MA_NOACTIVATE: don't activate the window, but pass the click through.
 MA_NOACTIVATE = 3
+
+# SetWindowDisplayAffinity dwAffinity values (winuser.h).
+# WDA_EXCLUDEFROMCAPTURE (Win10 2004+) tells the OS to exclude this
+# window from all screen-capture paths — BitBlt+CAPTUREBLT, DXGI
+# Desktop Duplication, screenshot tools, Teams/Zoom screen share.
+# Primary hall-of-mirrors defense (Path A) per 03-RESEARCH.md.
+WDA_NONE               = 0x00000000
+WDA_MONITOR            = 0x00000001
+WDA_EXCLUDEFROMCAPTURE = 0x00000011

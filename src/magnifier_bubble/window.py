@@ -81,6 +81,14 @@ def _u32():
             wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
         ]
         u32.SendMessageW.restype = ctypes.c_ssize_t
+        u32.SetWindowDisplayAffinity.argtypes = [
+            wintypes.HWND, wintypes.DWORD
+        ]
+        u32.SetWindowDisplayAffinity.restype = wintypes.BOOL
+        u32.GetWindowDisplayAffinity.argtypes = [
+            wintypes.HWND, ctypes.POINTER(wintypes.DWORD)
+        ]
+        u32.GetWindowDisplayAffinity.restype = wintypes.BOOL
         _WINDOW_SIGNATURES_APPLIED = True
     return u32
 
@@ -128,6 +136,24 @@ class BubbleWindow:
                 # Full-window alpha = 255 (opaque). Individual Tk widgets
                 # paint their own dark fills for the LAYT-05 effect.
                 u32.SetLayeredWindowAttributes(self._hwnd, 0, 255, wc.LWA_ALPHA)
+
+                # --- Step 8b (Phase 3): hall-of-mirrors Path A defense ---
+                # SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) tells
+                # the OS to exclude this window from all screen-capture paths.
+                # Works against BitBlt+CAPTUREBLT (mss 10.1.0), DXGI Desktop
+                # Duplication, screenshot tools, and screen sharing. Windows 10
+                # 2004+; on older Windows this silently fails and Path B
+                # (CAPTUREBLT=0 in capture.py run()) takes over.
+                # See .planning/phases/03-capture-loop/03-RESEARCH.md Pattern 3.
+                if not u32.SetWindowDisplayAffinity(
+                    self._hwnd, wc.WDA_EXCLUDEFROMCAPTURE
+                ):
+                    print(
+                        "[bubble] SetWindowDisplayAffinity failed "
+                        f"(err={ctypes.get_last_error()}); relying on "
+                        "capture.py CAPTUREBLT=0 fallback",
+                        flush=True,
+                    )
 
         # --- Step 9: Build canvas + LAYT-05 strips + LAYT-06 border ---
         self._canvas: tk.Canvas = tk.Canvas(

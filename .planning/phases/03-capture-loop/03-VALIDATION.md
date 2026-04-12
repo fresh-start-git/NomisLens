@@ -2,8 +2,8 @@
 phase: 3
 slug: capture-loop
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-11
 ---
 
@@ -43,8 +43,8 @@ created: 2026-04-11
 | 03-01-03 | 01 | 1 | CAPT-03 | unit | `python -m pytest tests/test_capture.py -k exclusion -x -q` | ❌ W0 | ⬜ pending |
 | 03-01-04 | 01 | 1 | CAPT-05 | unit | `python -m pytest tests/test_capture.py -k memory -x -q` | ❌ W0 | ⬜ pending |
 | 03-02-01 | 02 | 2 | CAPT-06 | lint | `grep -r "ImageGrab" src/` | ✅ | ⬜ pending |
-| 03-02-02 | 02 | 2 | CAPT-01,CAPT-02 | integration | `python -m pytest tests/test_capture_integration.py -x -q` | ❌ W0 | ⬜ pending |
-| 03-02-03 | 02 | 2 | CAPT-03 | integration | `python -m pytest tests/test_capture_integration.py -k hall_of_mirrors -x -q` | ❌ W0 | ⬜ pending |
+| 03-02-02 | 02 | 2 | CAPT-01,CAPT-02 | integration | `python -m pytest tests/test_capture_smoke.py -x -q` | ❌ W0 | ⬜ pending |
+| 03-02-03 | 02 | 2 | CAPT-03 | integration | `python -m pytest tests/test_capture_smoke.py -k hall_of_mirrors -x -q` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -53,7 +53,7 @@ created: 2026-04-11
 ## Wave 0 Requirements
 
 - [ ] `tests/test_capture.py` — unit test stubs for CAPT-01..05 (CaptureWorker, paste pattern, exclusion rect)
-- [ ] `tests/test_capture_integration.py` — integration test stubs for CAPT-01..03 (wired to BubbleWindow canvas)
+- [ ] `tests/test_capture_smoke.py` — Windows-only smoke tests for CAPT-01/02/03/05/06 (fps, memory, hall-of-mirrors, wired to BubbleWindow canvas)
 
 *Existing infrastructure covers conftest.py and pyproject.toml from Phase 1.*
 

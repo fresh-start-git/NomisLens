@@ -7,10 +7,10 @@
 
 ### Overlay Window
 
-- [ ] **OVER-01**: App window is always-on-top and has no taskbar presence (WS_EX_TOOLWINDOW)
-- [ ] **OVER-02**: Window has no title bar or standard OS chrome (overrideredirect)
+- [x] **OVER-01**: App window is always-on-top and has no taskbar presence (WS_EX_TOOLWINDOW)
+- [x] **OVER-02**: Window has no title bar or standard OS chrome (overrideredirect)
 - [x] **OVER-03**: Window is a layered window (WS_EX_LAYERED) to enable per-pixel transparency and click-through
-- [ ] **OVER-04**: Window never steals focus from Cornerstone or any other app (WS_EX_NOACTIVATE)
+- [x] **OVER-04**: Window never steals focus from Cornerstone or any other app (WS_EX_NOACTIVATE)
 - [x] **OVER-05**: DPI awareness set as first line of main.py (SetProcessDpiAwarenessContext Per-Monitor-V2) before any imports
 
 ### Capture
@@ -28,8 +28,8 @@
 - [x] **LAYT-02**: Middle content zone is 100% click-through — all mouse and touch input passes through to underlying app (WM_NCHITTEST → HTTRANSPARENT for middle zone)
 - [x] **LAYT-03**: Top drag bar and bottom control strip capture mouse/touch input normally
 - [x] **LAYT-04**: WndProc subclassed via SetWindowLongPtrW + GWLP_WNDPROC; callback stored on instance to prevent GC crash
-- [ ] **LAYT-05**: Top and bottom strips are semi-transparent dark overlay (rgba 0,0,0 ~180 alpha)
-- [ ] **LAYT-06**: Teal/soft-blue border (3–4px) visible around the bubble on any background
+- [x] **LAYT-05**: Top and bottom strips are semi-transparent dark overlay (rgba 0,0,0 ~180 alpha)
+- [x] **LAYT-06**: Teal/soft-blue border (3–4px) visible around the bubble on any background
 
 ### Controls
 
@@ -109,10 +109,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| OVER-01 | Phase 2 | Pending |
-| OVER-02 | Phase 2 | Pending |
+| OVER-01 | Phase 2 | Complete |
+| OVER-02 | Phase 2 | Complete |
 | OVER-03 | Phase 2 | Complete |
-| OVER-04 | Phase 2 | Pending |
+| OVER-04 | Phase 2 | Complete |
 | OVER-05 | Phase 1 | Complete |
 | CAPT-01 | Phase 3 | Pending |
 | CAPT-02 | Phase 3 | Pending |
@@ -124,8 +124,8 @@
 | LAYT-02 | Phase 2 | Complete |
 | LAYT-03 | Phase 2 | Complete |
 | LAYT-04 | Phase 2 | Complete |
-| LAYT-05 | Phase 2 | Pending |
-| LAYT-06 | Phase 2 | Pending |
+| LAYT-05 | Phase 2 | Complete |
+| LAYT-06 | Phase 2 | Complete |
 | CTRL-01 | Phase 4 | Pending |
 | CTRL-02 | Phase 4 | Pending |
 | CTRL-03 | Phase 4 | Pending |

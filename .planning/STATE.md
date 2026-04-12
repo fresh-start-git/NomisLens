@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 3
 status: unknown
-stopped_at: Completed 02-02-PLAN.md (wndproc LONG_PTR subclass + shapes HRGN mask); Phase 02 plan 3/3 next
-last_updated: "2026-04-11T22:53:09.041Z"
+stopped_at: Completed 02-03-PLAN.md (BubbleWindow Tk+Win32 integration + manual verification); Phase 02 complete
+last_updated: "2026-04-12T00:07:06.095Z"
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -60,6 +60,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 | Phase 01-foundation-dpi P03 | 9min | 3 tasks | 4 files |
 | Phase 02-overlay-window P01 | 4 min | 2 (TDD) | 4 |
 | Phase 02-overlay-window P02 | 9 min | 2 tasks | 5 files |
+| Phase 02-overlay-window P03 | 65 | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,10 @@ Recent decisions affecting current work:
 - [Phase 02-overlay-window]: [Phase 02-overlay-window/02]: wndproc.py applies LONG_PTR-safe argtypes for SetWindowLongPtrW / GetWindowLongPtrW / CallWindowProcW / GetWindowRect / SendMessageW via a lazy _SIGNATURES_APPLIED sentinel — identical structural pattern to Phase 1 P03 dpi._u32. The WNDPROC thunk is stored on a WndProcKeepalive __slots__ container (new_proc, old_proc, hwnd) to prevent CPython GC — Pitfall A eliminated.
 - [Phase 02-overlay-window]: [Phase 02-overlay-window/02]: shapes.apply_shape has EXACTLY one DeleteObject call, inside the 'if result == 0:' failure branch. On SetWindowRgn success the OS owns the HRGN and the app MUST NOT release it (Pitfall F / Pitfall 6). 50-cycle stress test (circle->rounded->rect->...) + 10-size resize stress pass with zero crashes.
 - [Phase 02-overlay-window]: [Phase 02-overlay-window/02]: pywin32 311 cp314 wheel INSTALLED successfully on the Python 3.14.3 dev box — partial de-risk of the Phase 8 wheel-compatibility blocker. mss / Pillow / numpy / pyinstaller wheel checks remain pending for their respective plan gates.
+- [Phase 02-overlay-window]: Three-HWND WndProc chain required (parent + Tk frame child + canvas child) — Windows delivers WM_NCHITTEST to topmost HWND (canvas); single parent subclass insufficient for click-through
+- [Phase 02-overlay-window]: Check 6 click-through gap deferred to Phase 4 — coordinate-translated WM_LBUTTONDOWN injection is the correct mechanism for a zoom app; raw HTTRANSPARENT blocked by Tk frame cross-process propagation
+- [Phase 02-overlay-window]: [Phase 02-overlay-window/03]: install_child() added to wndproc.py for child HWND subclassing (canvas + frame); MA_NOACTIVATE via WM_MOUSEACTIVATE intercept at both parent and child WndProcs
+- [Phase 02-overlay-window]: [Phase 02-overlay-window/03]: default shape changed to 'rect' in StateSnapshot — circle HRGN ill-defined before Phase 4 shape selector; rect gives unambiguous full-border visual
 
 ### Pending Todos
 
@@ -109,8 +114,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-11T22:53:09.036Z
-Stopped at: Completed 02-02-PLAN.md (wndproc LONG_PTR subclass + shapes HRGN mask); Phase 02 plan 3/3 next
+Last session: 2026-04-12T00:07:06.091Z
+Stopped at: Completed 02-03-PLAN.md (BubbleWindow Tk+Win32 integration + manual verification); Phase 02 complete
 Resume file: None
 
 Next step: `/gsd:execute-plan 02 02` (execute Plan 02-02 — wndproc.py WndProc subclass bridging hit_test strings to HT* constants)

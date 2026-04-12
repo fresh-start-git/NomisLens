@@ -13,7 +13,7 @@ Ultimate Zoom is a floating, click-through, always-on-top magnifier bubble for a
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation + DPI** - Project scaffold, AppState container, DPI awareness set as first line of main.py (completed 2026-04-11)
-- [ ] **Phase 2: Overlay Window** - Shaped, draggable, click-through, non-focus-stealing empty bubble on screen
+- [x] **Phase 2: Overlay Window** - Shaped, draggable, click-through, non-focus-stealing empty bubble on screen (completed 2026-04-12)
 - [ ] **Phase 3: Capture Loop** - Live magnified pixels rendered inside the bubble at 30 fps with no memory leak
 - [ ] **Phase 4: Controls, Shape, Resize** - Zoom buttons, shape cycling, resize grip, touch-sized hit targets
 - [ ] **Phase 5: Config Persistence** - Position, size, zoom, shape saved to config.json and restored on launch
@@ -134,7 +134,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation + DPI | 3/3 | Complete | 2026-04-11 |
-| 2. Overlay Window | 0/3 | Planned | - |
+| 2. Overlay Window | 3/3 | Complete   | 2026-04-12 |
 | 3. Capture Loop | 0/TBD | Not started | - |
 | 4. Controls, Shape, Resize | 0/TBD | Not started | - |
 | 5. Config Persistence | 0/TBD | Not started | - |

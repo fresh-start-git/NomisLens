@@ -64,7 +64,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The bubble does not show its own content recursively (no "hall of mirrors") when positioned over its previous location
   4. The app's memory footprint is stable (< 5 MB drift) after 10 minutes of continuous capture, proving the single-PhotoImage `paste()` pattern is in place
   5. `grep -r "ImageGrab" src/` returns zero matches in the hot capture path; only `mss` is used
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 03-01-PLAN.md — Pure-Python capture.py module (CaptureWorker producer thread with mss + BILINEAR + Event.wait pacing + outer reconnect loop) + Wave 0 structural/lint tests in tests/test_capture.py + mss/Pillow wheel verification (CAPT-01, CAPT-02, CAPT-03, CAPT-04)
+- [ ] 03-02-PLAN.md — BubbleWindow wiring (_photo/_image_id/_on_frame/start_capture Step 9b) + SetWindowDisplayAffinity Path A (Step 8b) hall-of-mirrors defense + tests/test_capture_smoke.py (Windows-only fps/memory/teal-sampling) + 7-point manual verification checkpoint (CAPT-01, CAPT-02, CAPT-05, CAPT-06)
 
 ### Phase 4: Controls, Shape, and Resize
 **Goal**: Give the user the on-bubble controls they need to operate the magnifier with fingers on a touchscreen — zoom in/out, cycle shapes, resize — all with touch-safe hit targets and the full specified zoom range.
@@ -135,7 +137,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Foundation + DPI | 3/3 | Complete | 2026-04-11 |
 | 2. Overlay Window | 3/3 | Complete   | 2026-04-12 |
-| 3. Capture Loop | 0/TBD | Not started | - |
+| 3. Capture Loop | 0/2 | Not started | - |
 | 4. Controls, Shape, Resize | 0/TBD | Not started | - |
 | 5. Config Persistence | 0/TBD | Not started | - |
 | 6. Global Hotkey | 0/TBD | Not started | - |

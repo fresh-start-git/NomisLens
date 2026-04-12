@@ -45,7 +45,9 @@ class CaptureWorker(threading.Thread):
         super().__init__(daemon=True, name="magnifier-capture")
         self._state = state
         self._on_frame = on_frame
-        self._target_dt = 1.0 / max(1.0, target_fps)
+        # Target 5% faster than requested to absorb scheduling jitter
+        # (Windows Event.wait granularity + GDI capture variance).
+        self._target_dt = 1.0 / max(1.0, target_fps * 1.05)
         self._stop = threading.Event()
         self._fps_samples: deque[float] = deque(maxlen=60)
 
@@ -69,42 +71,56 @@ class CaptureWorker(threading.Thread):
         Uses an outer reconnect loop (Pitfall 7) around mss.mss()
         and an inner frame loop with Event.wait-based pacing (Pitfall 4).
         """
-        # Lazy imports -- thread-local contract requires mss.mss() to
+        # Lazy imports -- thread-local contract requires mss instance to
         # be created on THIS thread, so the whole mss module is also
         # imported here. Path B hall-of-mirrors defense goes BEFORE
-        # mss.mss() construction.
-        import mss
+        # MSS() construction.
+        #
+        # NOTE: we use mss.windows.MSS() directly instead of the
+        # mss.mss() factory because the factory calls platform.system()
+        # which intermittently hangs on Windows 11 (WMI timeout).
         import mss.windows as _mw
         _mw.CAPTUREBLT = 0
         from PIL import Image
 
+        # Increase Windows timer resolution from default 15.6 ms to 1 ms
+        # so Event.wait() can sleep accurately for sub-16 ms intervals.
+        # Without this, target_fps=30 (33 ms budget, ~29 ms wait) rounds
+        # up to 31.2 ms (2 timer ticks), yielding only ~22 fps.
+        import ctypes
+        _winmm = ctypes.windll.winmm  # type: ignore[attr-defined]
+        _winmm.timeBeginPeriod(1)
+
         # Outer loop: reconnect mss on GDI failure (Pitfall 7 --
         # mss 10.1.0 GetDIBits() fails after minutes of recording).
-        while not self._stop.is_set():
-            try:
-                with mss.mss() as sct:
-                    while not self._stop.is_set():
-                        t0 = time.perf_counter()
-                        try:
-                            self._tick(sct, Image)
-                        except Exception as exc:
-                            print(
-                                f"[capture] tick error: {exc}",
-                                flush=True,
+        try:
+            while not self._stop.is_set():
+                try:
+                    with _mw.MSS() as sct:
+                        while not self._stop.is_set():
+                            t0 = time.perf_counter()
+                            try:
+                                self._tick(sct, Image)
+                            except Exception as exc:
+                                print(
+                                    f"[capture] tick error: {exc}",
+                                    flush=True,
+                                )
+                                break  # reconnect mss
+                            self._fps_samples.append(time.perf_counter())
+                            remaining = self._target_dt - (
+                                time.perf_counter() - t0
                             )
-                            break  # reconnect mss
-                        self._fps_samples.append(time.perf_counter())
-                        remaining = self._target_dt - (
-                            time.perf_counter() - t0
-                        )
-                        if remaining > 0:
-                            self._stop.wait(remaining)
-            except Exception as exc:
-                print(
-                    f"[capture] mss instance error: {exc}",
-                    flush=True,
-                )
-                self._stop.wait(0.5)  # backoff before retry
+                            if remaining > 0:
+                                self._stop.wait(remaining)
+                except Exception as exc:
+                    print(
+                        f"[capture] mss instance error: {exc}",
+                        flush=True,
+                    )
+                    self._stop.wait(0.5)  # backoff before retry
+        finally:
+            _winmm.timeEndPeriod(1)
 
     def _tick(self, sct, Image_cls) -> None:
         """Grab one frame, resize with BILINEAR, invoke callback."""

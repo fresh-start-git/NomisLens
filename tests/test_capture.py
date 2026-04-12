@@ -143,30 +143,37 @@ def test_capture_uses_bilinear_literal():
     )
 
 
-def test_mss_mss_constructed_inside_run():
-    """mss.mss() Call node must exist inside run(), nowhere else."""
+def test_mss_constructed_inside_run():
+    """MSS() construction must exist inside run(), nowhere else.
+
+    Uses _mw.MSS() (direct mss.windows.MSS) instead of the mss.mss()
+    factory to avoid platform.system() hangs on Windows 11 (Rule 1 fix).
+    The thread-local safety requirement is unchanged: the MSS instance
+    MUST be created on the capture thread, inside run().
+    """
     tree = _capture_ast()
     run_def = _find_funcdef(tree, "run")
 
     def _find_mss_calls(subtree):
+        """Find _mw.MSS() calls (the direct constructor pattern)."""
         calls = []
         for node in ast.walk(subtree):
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
-            if isinstance(func, ast.Attribute) and func.attr == "mss":
-                if isinstance(func.value, ast.Name) and func.value.id == "mss":
+            if isinstance(func, ast.Attribute) and func.attr == "MSS":
+                if isinstance(func.value, ast.Name) and func.value.id == "_mw":
                     calls.append(node)
         return calls
 
     run_calls = _find_mss_calls(run_def)
-    assert len(run_calls) >= 1, "mss.mss() not found inside run()"
+    assert len(run_calls) >= 1, "_mw.MSS() not found inside run()"
 
-    # Check no mss.mss() outside run()
+    # Check no MSS() outside run()
     all_calls = _find_mss_calls(tree)
     outside = len(all_calls) - len(run_calls)
     assert outside == 0, (
-        f"Found {outside} mss.mss() call(s) outside run() -- "
+        f"Found {outside} _mw.MSS() call(s) outside run() -- "
         "mss must be constructed inside run() for thread-local safety"
     )
 

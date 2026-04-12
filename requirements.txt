@@ -2,7 +2,7 @@
 # Installed by: pip install -r requirements.txt
 mss==10.1.0
 pywin32==311
-Pillow==11.3.0
+Pillow==12.1.1
 numpy==2.2.6
 pystray==0.19.5
 pyinstaller==6.11.1

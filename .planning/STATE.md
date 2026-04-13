@@ -3,13 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 04-03-PLAN.md (cross-process click injection via PostMessageW + --no-click-injection CLI flag); Phase 04 fully complete (10/11 project plans done)
-last_updated: "2026-04-13T19:30:34.854Z"
+stopped_at: "Completed 05-01-PLAN.md (config persistence core module: config_path + write_atomic + load + ConfigWriter with 500ms debounce; 28 unit + 6 smoke tests green)"
+last_updated: "2026-04-13T20:28:10.477Z"
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 11
-  completed_plans: 10
+  total_plans: 13
+  completed_plans: 11
+  percent: 85
 ---
 
 # Project State
@@ -19,21 +20,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Clicks and touches pass through the magnified content area to whatever app is underneath — the bubble enhances vision without blocking the workflow.
-**Current focus:** Phase 04 — controls-shape-resize
+**Current focus:** Phase 05 — config-persistence
 
 ## Current Position
 
-Phase: 04 (controls-shape-resize) — COMPLETE (3/3 plans done)
-Plan: 3 of 3 (complete)
-Next: Phase 05 — config-persistence
+Phase: 05 (config-persistence) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 10
+- Total plans completed: 11
 - Average duration: ~12 min
-- Total execution time: ~2.2 hours
+- Total execution time: ~2.4 hours
 
 **By Phase:**
 
@@ -43,11 +43,12 @@ Next: Phase 05 — config-persistence
 | 02-overlay-window | 3 | 78 min | 26 min |
 | 03-capture-loop | 1 | 8 min | 8 min |
 | 04-controls-shape-resize | 3 | 75 min | 25 min |
+| 05-config-persistence | 1 | 8 min | 8 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 03-02 (? min), 04-01 (7 min), 04-02 (40 min), 04-03 (28 min)
-- Trend: Phase 04 complete — Plan 04-03 closed the Phase 2 LAYT-02 cross-process click-through gap via PostMessageW(WM_LBUTTONDOWN/UP) + ChildWindowFromPointEx(CWP_SKIPTRANSPARENT). 3 tasks, 2 auto-fixed deviations (docstring-tripped-own-lint, constructor signature test relaxation), 1 blocking test-env setup (root geometry reset for middle-band tests). Auth: none. Task 3 human-verify auto-approved per yolo mode; manual Notepad/Cornerstone verification deferred to user.
+- Last 5 plans: 04-01 (7 min), 04-02 (40 min), 04-03 (28 min), 05-01 (8 min)
+- Trend: Phase 05 started — Plan 05-01 delivered the pure-Python config core (config_path + write_atomic + load + ConfigWriter) with 28 unit tests + 6 Windows-only Tk smoke tests green, stdlib-only, importable on non-Windows CI. 3 tasks (TDD for 1+2), 1 auto-fixed deviation (module-docstring-tripped-own-lint, third repo occurrence of this pattern). No auth gates. Plan 05-02 will wire config_path + ConfigWriter into app.py.main() and BubbleWindow.destroy().
 
 *Updated after each plan completion*
 
@@ -65,6 +66,7 @@ Next: Phase 05 — config-persistence
 | Phase 04-controls-shape-resize P01 | 7 min | 3 tasks (TDD for 1+2) | 5 files |
 | Phase 04-controls-shape-resize P02 | 40 min | 3 tasks (TDD for 1+2, human-verify for 3) | 4 files |
 | Phase 04-controls-shape-resize P03 | 28 min | 3 tasks (2 automated + 1 auto-approved human-verify) | 8 files |
+| Phase 05 P01 | 8 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -126,6 +128,11 @@ Recent decisions affecting current work:
 - [Phase 04-controls-shape-resize/03]: [Rule 1 bug fix] `test_bubblewindow_constructor_signature` relaxed from exact `['self', 'state']` to "first-2-locked + extras-have-defaults". Same relaxation pattern applied to `test_apply_shape_signature_locked` in Phase 4-02 — Phase 1-3 call sites stay safe, Phase 4+ can add keyword-only extras.
 - [Phase 04-controls-shape-resize/03]: [Rule 3 blocking fix] Tests for content-zone middle-band routing explicitly call `bubble.root.geometry("400x400+100+100")` and reset `_drag_origin`/`_resize_origin` before exercising `_on_canvas_press`. AppState observer only resizes the Canvas, not the root window; prior fixture-sharing tests left root at 150x150 causing the middle-band check `event.y < (winfo_height - CONTROL_STRIP_HEIGHT)` to false-negative. Observer behavior is correct (root geometry is user-controlled via drag, not state-controlled).
 - [Phase 04-controls-shape-resize]: PHASE 04 COMPLETE — All 9 CTRL-* requirements (CTRL-01..09) + LAYT-02 cross-process click-through gap closure delivered across 3 plans. Ready for Phase 05 (config persistence) or Phase 06 (global hotkey) — both independent of Phase 04 work.
+- [Phase 05]: [Phase 05-config-persistence/01]: config.py clamp helpers duplicated inline from state.py (not imported) — state.py has zero bounds-checking for w/h because it never reads untrusted JSON; config owns its own _clamp_size(150..700) + inline _clamp_zoom replica. 4 lines of duplication, zero import coupling.
+- [Phase 05]: [Phase 05-config-persistence/01]: tkinter confined to TYPE_CHECKING in config.py — ConfigWriter duck-types on root.after / root.after_cancel. Module imports cleanly on Linux CI without DISPLAY, matches Phase 1 dpi.py lazy-import precedent.
+- [Phase 05]: [Phase 05-config-persistence/01]: [Rule 1 bug fix] config.py module docstring rewritten to describe banned APIs (threading.Timer, os.access, state.set_*) without naming them literally — same class of bug previously fixed in Phase 2-02 wndproc.py (LOWORD/HIWORD) and Phase 4-03 clickthru.py (SendMessageW/PyDLL). Third occurrence — consider adding planner guidance to avoid the footgun.
+- [Phase 05]: [Phase 05-config-persistence/01]: ConfigWriter instance attrs locked for Plan 05-02: _after_id: Optional[str], _last_written: Optional[StateSnapshot]. Plan 05-02 integration tests may read these directly; no public accessor methods required.
+- [Phase 05]: [Phase 05-config-persistence/01]: test_config_smoke.py debounce pump ceiling bumped to 1.5s (plan specified 0.8s) to absorb scheduler jitter on CI. 500ms debounce target dominates median; zero flakes observed.
 
 ### Pending Todos
 
@@ -142,8 +149,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-13T14:59:06Z
-Stopped at: Completed 04-03-PLAN.md (cross-process click injection via PostMessageW + --no-click-injection CLI flag); Phase 04 fully complete (10/11 project plans done)
+Last session: 2026-04-13T20:28:10.473Z
+Stopped at: Completed 05-01-PLAN.md (config persistence core module: config_path + write_atomic + load + ConfigWriter with 500ms debounce; 28 unit + 6 smoke tests green)
 Resume file: None
 
 Next step: `/gsd:execute-phase 05` (Phase 05 config-persistence — debounced config.json writer wired to AppState observer + %LOCALAPPDATA% fallback path for clinic IT-locked app-directory) OR `/gsd:execute-phase 06` (Phase 06 global-hotkey — Ctrl+Alt+Z show/hide via ctypes.user32.RegisterHotKey). Both phases are independent of Phase 04 work. User should also run the 5-step manual verification of Plan 04-03 Task 3 (Notepad click-through, rapid-tap CPU check, optional Cornerstone test, --no-click-injection fallback, regression drag/shape/zoom/resize) when next at the clinic dev box.

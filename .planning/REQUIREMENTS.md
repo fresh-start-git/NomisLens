@@ -61,10 +61,10 @@
 
 ### Persistence
 
-- [ ] **PERS-01**: config.json saved in the same directory as the app executable
-- [ ] **PERS-02**: Config is written on every change (position, size, zoom level, shape) using debounce (500 ms) and atomic os.replace()
-- [ ] **PERS-03**: On launch, app restores last known position, size, zoom level, and shape from config.json
-- [ ] **PERS-04**: Config write pending at shutdown is flushed before exit (WM_DELETE_WINDOW handler)
+- [x] **PERS-01**: config.json saved in the same directory as the app executable
+- [x] **PERS-02**: Config is written on every change (position, size, zoom level, shape) using debounce (500 ms) and atomic os.replace()
+- [x] **PERS-03**: On launch, app restores last known position, size, zoom level, and shape from config.json
+- [x] **PERS-04**: Config write pending at shutdown is flushed before exit (WM_DELETE_WINDOW handler)
 
 ### Build and Deployment
 
@@ -145,10 +145,10 @@
 | TRAY-03 | Phase 7 | Pending |
 | TRAY-04 | Phase 7 | Pending |
 | TRAY-05 | Phase 7 | Pending |
-| PERS-01 | Phase 5 | Pending |
-| PERS-02 | Phase 5 | Pending |
-| PERS-03 | Phase 5 | Pending |
-| PERS-04 | Phase 5 | Pending |
+| PERS-01 | Phase 5 | Complete |
+| PERS-02 | Phase 5 | Complete |
+| PERS-03 | Phase 5 | Complete |
+| PERS-04 | Phase 5 | Complete |
 | BULD-01 | Phase 8 | Pending |
 | BULD-02 | Phase 8 | Pending |
 | BULD-03 | Phase 8 | Pending |

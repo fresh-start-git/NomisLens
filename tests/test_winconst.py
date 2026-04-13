@@ -41,6 +41,12 @@ WINCONST_PATH = (
         ("WM_MOUSEMOVE",      0x0200),
         ("WM_LBUTTONDOWN",    0x0201),
         ("WM_DESTROY",        0x0002),
+        # ---- Phase 4 additions ----
+        ("CWP_SKIPINVISIBLE",   0x0001),
+        ("CWP_SKIPDISABLED",    0x0002),
+        ("CWP_SKIPTRANSPARENT", 0x0004),
+        ("MK_LBUTTON",          0x0001),
+        ("WM_LBUTTONUP",        0x0202),
     ],
 )
 def test_winconst_value(name, expected):

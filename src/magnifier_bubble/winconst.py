@@ -63,3 +63,21 @@ MA_NOACTIVATE = 3
 WDA_NONE               = 0x00000000
 WDA_MONITOR            = 0x00000001
 WDA_EXCLUDEFROMCAPTURE = 0x00000011
+
+# ---- Phase 4 additions ----
+
+# ChildWindowFromPointEx flags (winuser.h).
+# CWP_SKIPTRANSPARENT is load-bearing - without it, ChildWindowFromPointEx
+# returns our own WS_EX_LAYERED bubble and PostMessageW injection would
+# recurse into our canvas. See Pitfall I in 04-RESEARCH.md.
+CWP_SKIPINVISIBLE    = 0x0001
+CWP_SKIPDISABLED     = 0x0002
+CWP_SKIPTRANSPARENT  = 0x0004
+
+# Mouse button state bit flags for WM_*BUTTON* message wParam (winuser.h).
+MK_LBUTTON = 0x0001
+
+# Mouse button message to complement the already-present WM_LBUTTONDOWN.
+# Used by clickthru.py to post UP immediately after DOWN - some targets
+# don't consume a lone DOWN.
+WM_LBUTTONUP = 0x0202

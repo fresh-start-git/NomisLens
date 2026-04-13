@@ -78,9 +78,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Dragging the bottom-right resize button [⤢] and the window corner grip both resize the bubble, clamped to 150×150 min and 700×700 max
   4. Every interactive control (drag grip, shape button, zoom buttons, resize button) measures at least 44×44 pixels and is tappable with a fingertip on the clinic touchscreen
   5. The top strip grip indicator (≡) is visible and the bubble drags smoothly by finger from anywhere on the top strip
-**Plans**: 3 plans (1/3 complete)
+**Plans**: 3 plans (2/3 complete)
 - [x] 04-01-PLAN.md — Pure-Python controls.py module (SHAPE_CYCLE, layout_controls, hit_button, zoom_step, resize_clamp) + TDD tests/test_controls.py + Wave 0 stubs for Plans 02/03 + extend shapes smoke to 100-cycle interleaved-resize (covers CTRL-02, CTRL-05, CTRL-08, CTRL-09 math) (completed 2026-04-13, see 04-01-SUMMARY.md)
-- [ ] 04-02-PLAN.md — BubbleWindow Canvas controls wiring (grip glyph, shape button, zoom buttons + live text, resize button) + manual-geometry resize via <B1-Motion> + root.geometry (NO SendMessageW) + press-dispatch via hit_button + AppState observer + 7-check human verification (covers CTRL-01, CTRL-02, CTRL-03, CTRL-04, CTRL-06, CTRL-07, CTRL-08, CTRL-09 integration)
+- [x] 04-02-PLAN.md — BubbleWindow Canvas controls wiring (grip glyph, shape button, zoom buttons + live text, resize button) + manual-geometry resize via <B1-Motion> + root.geometry (NO SendMessageW) + press-dispatch via hit_button + AppState observer + strip-aware HRGN bug fix (CombineRgn(RGN_OR) unions shape with top+bottom strips so controls stay clickable in every shape) (completed 2026-04-13, see 04-02-SUMMARY.md)
 - [ ] 04-03-PLAN.md — clickthru.py cross-process click injection (PostMessageW + ChildWindowFromPointEx CWP_SKIPTRANSPARENT + self-HWND guard) + winconst.py extension + BubbleWindow content-zone wiring + --no-click-injection CLI fallback + Notepad/Cornerstone manual verification (closes Phase 2 LAYT-02 gap)
 
 ### Phase 5: Config Persistence
@@ -140,8 +140,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Foundation + DPI | 3/3 | Complete | 2026-04-11 |
 | 2. Overlay Window | 3/3 | Complete   | 2026-04-12 |
-| 3. Capture Loop | 0/2 | Not started | - |
-| 4. Controls, Shape, Resize | 1/3 | In progress | - |
+| 3. Capture Loop | 1/2 | In progress | - |
+| 4. Controls, Shape, Resize | 2/3 | In progress | - |
 | 5. Config Persistence | 0/TBD | Not started | - |
 | 6. Global Hotkey | 0/TBD | Not started | - |
 | 7. System Tray | 0/TBD | Not started | - |

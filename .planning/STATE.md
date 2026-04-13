@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-01-PLAN.md (pure-Python controls.py + Wave 0 stubs + 100-cycle shapes smoke)
-last_updated: "2026-04-13T01:28:15Z"
+stopped_at: Completed 04-02-PLAN.md (BubbleWindow canvas controls wiring + strip-aware HRGN bug fix)
+last_updated: "2026-04-13T09:55:00Z"
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -24,15 +24,15 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 ## Current Position
 
 Phase: 04 (controls-shape-resize) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 8
-- Average duration: ~8 min
-- Total execution time: ~1.1 hours
+- Total plans completed: 9
+- Average duration: ~12 min
+- Total execution time: ~1.75 hours
 
 **By Phase:**
 
@@ -41,12 +41,12 @@ Plan: 2 of 3
 | 01-foundation-dpi | 3 | 15 min | 5 min |
 | 02-overlay-window | 3 | 78 min | 26 min |
 | 03-capture-loop | 1 | 8 min | 8 min |
-| 04-controls-shape-resize | 1 | 7 min | 7 min |
+| 04-controls-shape-resize | 2 | 47 min | 24 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 02-03 (65 min), 03-01 (8 min), 03-02 (? min), 04-01 (7 min)
-- Trend: Phase 04 pure-Python plan 01 finished in 7 min with 1 Rule 1 bug fix (zoom_step snap-then-add contradicted plan's own test; fixed to ceil/floor-to-grid semantics)
+- Last 5 plans: 03-01 (8 min), 03-02 (? min), 04-01 (7 min), 04-02 (40 min)
+- Trend: Phase 04 Plan 02 hit a human-verify blocker in Task 3 (HRGN clip hid controls in circle/rounded) — fixed via strip-aware CombineRgn(RGN_OR) union; shapes.apply_shape gained backward-compat strip_top/strip_bottom kwargs; 2 extra regression tests in test_window_phase4.py (source-level kwarg check + runtime PtInRegion multi-shape hit test)
 
 *Updated after each plan completion*
 
@@ -62,6 +62,7 @@ Plan: 2 of 3
 | Phase 02-overlay-window P03 | 65 | 3 tasks | 7 files |
 | Phase 03 P01 | 8 | 3 tasks | 3 files |
 | Phase 04-controls-shape-resize P01 | 7 min | 3 tasks (TDD for 1+2) | 5 files |
+| Phase 04-controls-shape-resize P02 | 40 min | 3 tasks (TDD for 1+2, human-verify for 3) | 4 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,12 @@ Recent decisions affecting current work:
 - [Phase 04-controls-shape-resize/01]: ButtonRect is a @dataclass(frozen=True) with fields (name: str, x: int, y: int, w: int, h: int). Hashable, immutable — safe for use as dict keys in Plan 04-02 observers if needed.
 - [Phase 04-controls-shape-resize/01]: Wave 0 test scaffolding — tests/test_window_phase4.py (12 skip stubs for Plan 02) and tests/test_clickthru.py (10 skip stubs for Plan 03) let Plans 02/03 begin red-to-green work by replacing skip lines one test at a time. Skip messages reference the specific plan number.
 - [Phase 04-controls-shape-resize/01]: tests/test_shapes_smoke.py extended with test_apply_shape_100_cycle_interleaved_resize_no_crash — 100 iterations of shape cycle interleaved with 5-size rotation on the Windows dev box. Pitfall F regression guard. Original 50-cycle test unchanged (backward compat).
+- [Phase 04-controls-shape-resize/02]: [Rule 1 bug fix — Task 3 human-verify blocker] Cycling the shape button to "circle" or "rounded" made ALL controls unreachable because the HRGN clipped the full-width top/bottom strip corners. Fixed by adding optional `strip_top` / `strip_bottom` kwargs to `shapes.apply_shape` that union the shape region with two full-width strip rectangles via `CombineRgn(RGN_OR)`. Intermediate HRGNs (top_rgn, bot_rgn, shape_rgn after copy) are DeleteObject'd by us; only the final combined HRGN is passed to SetWindowRgn and becomes OS-owned on success — Pitfall 6 invariant preserved.
+- [Phase 04-controls-shape-resize/02]: shapes.apply_shape signature lock relaxed — first 4 positional params (hwnd, w, h, shape) stay locked for Phase 2/3 call-site compatibility; any additional params must have defaults so older callers work unchanged. test_apply_shape_signature_locked in test_shapes_smoke.py now asserts `params[:4] == [...]` + extras-have-defaults instead of exact-4.
+- [Phase 04-controls-shape-resize/02]: test_source_does_not_deleteobject_on_success in test_shapes_smoke.py tightened to `src.count("DeleteObject(rgn)") == 1` AND the call appears AFTER the `if result == 0:` line. Intermediate regions use different variable names (top_rgn, bot_rgn, shape_rgn) so their DeleteObject calls don't trip the invariant.
+- [Phase 04-controls-shape-resize/02]: AppState observer `_on_state_change` diffs prev vs new snapshot — re-applies `shapes.apply_shape(strip_top=DRAG_STRIP_HEIGHT, strip_bottom=CONTROL_STRIP_HEIGHT)` on shape change, re-layouts + re-applies HRGN on size change, updates zoom text via `canvas.itemconfig` on zoom change. Observer never calls `state.set_*` (no re-entrancy).
+- [Phase 04-controls-shape-resize/02]: Resize drag via `<B1-Motion>` + `root.geometry(f"{w}x{h}+{x}+{y}")` — NOT `SendMessageW(WM_SYSCOMMAND, SC_SIZE)`. Uses existing `_on_canvas_press/_on_canvas_drag/_on_canvas_release` bindings with two mutually-exclusive state slots (`_resize_origin` XOR `_drag_origin`); press decides exactly one via `hit_button`.
+- [Phase 04-controls-shape-resize/02]: Regression test `test_all_buttons_hittable_in_every_shape` uses GetWindowRgn + PtInRegion to sample 5 points per button (4 corners + center) across all 3 shapes — direct Win32 proof the HRGN no longer clips control-button pixels.
 
 ### Pending Todos
 
@@ -124,8 +131,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-13T01:28:15Z
-Stopped at: Completed 04-01-PLAN.md (pure-Python controls.py + Wave 0 stubs + 100-cycle shapes smoke)
+Last session: 2026-04-13T09:55:00Z
+Stopped at: Completed 04-02-PLAN.md (BubbleWindow canvas controls wiring + strip-aware HRGN bug fix)
 Resume file: None
 
-Next step: `/gsd:execute-plan 04 02` (execute Plan 04-02 — BubbleWindow Canvas controls wiring: grip glyph, shape button, zoom buttons + live text, resize button via manual geometry)
+Next step: `/gsd:execute-plan 04 03` (execute Plan 04-03 — clickthru.py cross-process click injection + winconst.py extension + BubbleWindow content-zone wiring + --no-click-injection CLI fallback + Notepad/Cornerstone manual verification)

@@ -38,6 +38,16 @@ WNDPROC = WINFUNCTYPE(
 
 _SIGNATURES_APPLIED = False
 
+# GIL-holding user32 for CallWindowProcW.
+# ctypes.windll releases the Python GIL before every native call. If a
+# Tk root.after() timer fires during that window (Python 3.14 tightened
+# the invariant), Tcl's timer handler calls PyEval_RestoreThread(NULL)
+# because the main thread's PyThreadState was cleared by the GIL release
+# → fatal crash. ctypes.PyDLL holds the GIL for the duration of the
+# native call so no Python timer code can run mid-WndProc.
+# GetWindowRect and SetWindowLongPtrW are not hot-path; they keep windll.
+_py_user32: ctypes.PyDLL | None = None  # type: ignore[attr-defined]
+
 
 def _u32():
     """Lazy access to user32 — avoids any import-time side effect on non-Windows.
@@ -46,7 +56,7 @@ def _u32():
     calls. Without these, x64 Python truncates LONG_PTR values to 32 bits
     and the WndProc subclass either no-ops or jumps to a corrupted pointer.
     """
-    global _SIGNATURES_APPLIED
+    global _SIGNATURES_APPLIED, _py_user32
     u32 = ctypes.windll.user32  # type: ignore[attr-defined]
     if not _SIGNATURES_APPLIED:
         u32.SetWindowLongPtrW.argtypes = [
@@ -55,17 +65,30 @@ def _u32():
         u32.SetWindowLongPtrW.restype = ctypes.c_void_p
         u32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
         u32.GetWindowLongPtrW.restype = ctypes.c_void_p
-        u32.CallWindowProcW.argtypes = [
-            ctypes.c_void_p,
-            wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
-        ]
-        u32.CallWindowProcW.restype = ctypes.c_ssize_t
         u32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
         u32.GetWindowRect.restype = wintypes.BOOL
         u32.SendMessageW.argtypes = [
             wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
         ]
         u32.SendMessageW.restype = ctypes.c_ssize_t
+
+        # PyDLL variant: holds GIL during hot-path calls so Tk timers
+        # cannot fire with a NULL Python thread state (Python 3.14 fatal).
+        # Covers CallWindowProcW (every message) AND GetWindowRect
+        # (called on every WM_NCHITTEST / mouse move) — both release the
+        # GIL via windll and are fast enough that any remaining windll
+        # call in the WndProc hot path must also move here.
+        _py_user32 = ctypes.PyDLL("user32.dll")  # type: ignore[attr-defined]
+        _py_user32.CallWindowProcW.argtypes = [
+            ctypes.c_void_p,
+            wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
+        ]
+        _py_user32.CallWindowProcW.restype = ctypes.c_ssize_t
+        _py_user32.GetWindowRect.argtypes = [
+            wintypes.HWND, ctypes.POINTER(wintypes.RECT)
+        ]
+        _py_user32.GetWindowRect.restype = wintypes.BOOL
+
         _SIGNATURES_APPLIED = True
     return u32
 
@@ -123,7 +146,7 @@ def install(
             sx = ctypes.c_short(lparam & 0xFFFF).value
             sy = ctypes.c_short((lparam >> 16) & 0xFFFF).value
             rect = wintypes.RECT()
-            u32.GetWindowRect(h, ctypes.byref(rect))
+            _py_user32.GetWindowRect(h, ctypes.byref(rect))
             cx = sx - rect.left
             cy = sy - rect.top
             w = rect.right - rect.left
@@ -140,7 +163,8 @@ def install(
                 return wc.HTTRANSPARENT
             # zone == "control" falls through to default WndProc, which
             # returns HTCLIENT for in-client-area points.
-        return u32.CallWindowProcW(old_proc, h, msg, wparam, lparam)
+        # PyDLL holds GIL — prevents Tk timer dispatch with NULL thread state.
+        return _py_user32.CallWindowProcW(old_proc, h, msg, wparam, lparam)
 
     new_proc = WNDPROC(py_wndproc)  # GC-fragile — MUST be stored on keepalive
 
@@ -190,7 +214,7 @@ def install_child(
             sx = ctypes.c_short(lparam & 0xFFFF).value
             sy = ctypes.c_short((lparam >> 16) & 0xFFFF).value
             rect = wintypes.RECT()
-            u32.GetWindowRect(h, ctypes.byref(rect))
+            _py_user32.GetWindowRect(h, ctypes.byref(rect))
             cx = sx - rect.left
             cy = sy - rect.top
             w = rect.right - rect.left
@@ -203,7 +227,8 @@ def install_child(
                 return wc.HTTRANSPARENT
             # drag/control: let Tk's original canvas WndProc handle it
             # (returns HTCLIENT → Tk fires <Button-1> → Pattern 2b drag).
-        return u32.CallWindowProcW(old_proc, h, msg, wparam, lparam)
+        # PyDLL holds GIL — prevents Tk timer dispatch with NULL thread state.
+        return _py_user32.CallWindowProcW(old_proc, h, msg, wparam, lparam)
 
     new_proc = WNDPROC(py_child_wndproc)
 

@@ -31,6 +31,7 @@ debugging a random ACCESS_VIOLATION (Pitfall A).
 from __future__ import annotations
 
 import ctypes
+import queue
 import sys
 import tkinter as tk
 from ctypes import wintypes
@@ -78,12 +79,6 @@ def _u32():
             wintypes.HWND, wintypes.COLORREF, wintypes.BYTE, wintypes.DWORD
         ]
         u32.SetLayeredWindowAttributes.restype = wintypes.BOOL
-        u32.ReleaseCapture.argtypes = []
-        u32.ReleaseCapture.restype = wintypes.BOOL
-        u32.SendMessageW.argtypes = [
-            wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
-        ]
-        u32.SendMessageW.restype = ctypes.c_ssize_t
         u32.SetWindowDisplayAffinity.argtypes = [
             wintypes.HWND, wintypes.DWORD
         ]
@@ -108,6 +103,13 @@ class BubbleWindow:
         self._wndproc_keepalive: wndproc.WndProcKeepalive | None = None
         self._canvas_wndproc_keepalive: wndproc.WndProcKeepalive | None = None
         self._frame_wndproc_keepalive: wndproc.WndProcKeepalive | None = None
+        # Thread-safe frame queue: the capture thread puts PIL Images here;
+        # the main thread drains it via a recurring root.after() poll.
+        # This eliminates ALL Tk/Tcl calls from the capture thread, removing
+        # the Python 3.14 GIL/PyEval_RestoreThread crash that occurred when
+        # root.after(0, ...) was called from the capture thread during any
+        # message-pump-active window (SendMessageW drag loop, WM_NCHITTEST, etc.)
+        self._frame_queue: queue.SimpleQueue = queue.SimpleQueue()
 
         snap = state.snapshot()
 
@@ -248,12 +250,19 @@ class BubbleWindow:
 
         # --- Pattern 2b: live-feedback drag via WM_LBUTTONDOWN on top strip ---
         # With WS_EX_NOACTIVATE set, HTCAPTION-only drag has a documented
-        # "dead-drag" regression (Pitfall E). The workaround is to bind a
-        # Tk <Button-1> on the top-strip canvas item's y-band and fire
-        # ReleaseCapture + SendMessage(WM_NCLBUTTONDOWN, HTCAPTION, 0).
-        # We bind on the whole canvas and gate by y-coordinate so the
-        # middle and bottom strips are not affected.
+        # Manual geometry-based drag — avoids SendMessageW(WM_NCLBUTTONDOWN).
+        # Pattern 2b (SendMessageW → DefWindowProc modal move loop) entered a
+        # native GetMessage pump with 3× re-entrant WndProc callbacks. Inside
+        # those, Tk's WndProc released the GIL (Py_BEGIN_ALLOW_THREADS), the
+        # capture thread acquired it for mss, and PyEval_RestoreThread(NULL)
+        # crashed Python 3.14. Manual drag stays entirely in Python: press
+        # records the screen origin, B1-Motion moves the window via geometry(),
+        # release syncs AppState. No modal loop, no re-entrant WndProc, no GIL
+        # state confusion.
+        self._drag_origin: tuple[int, int, int, int] | None = None
         self._canvas.bind("<Button-1>", self._on_canvas_press)
+        self._canvas.bind("<B1-Motion>", self._on_canvas_drag)
+        self._canvas.bind("<ButtonRelease-1>", self._on_canvas_release)
 
         # --- Graceful teardown on window close ---
         self.root.protocol("WM_DELETE_WINDOW", self.destroy)
@@ -290,28 +299,61 @@ class BubbleWindow:
         )
 
     def _on_canvas_press(self, event) -> None:
-        """Pattern 2b: live-feedback drag workaround for WS_EX_NOACTIVATE.
-
-        If the press lands on the top strip, release Tk's capture and
-        ask Windows to start its native move loop. This is what produces
-        smooth mid-drag feedback on WS_EX_NOACTIVATE windows.
-        """
+        """Record drag origin when the press lands on the top strip."""
         if event.y >= DRAG_STRIP_HEIGHT:
-            return  # let WndProc + native hit-test handle non-drag zones
-        if sys.platform != "win32" or not self._hwnd:
             return
-        u32 = _u32()
-        u32.ReleaseCapture()
-        u32.SendMessageW(self._hwnd, wc.WM_NCLBUTTONDOWN, wc.HTCAPTION, 0)
+        self._drag_origin = (
+            event.x_root, event.y_root,
+            self.root.winfo_x(), self.root.winfo_y(),
+        )
+
+    def _on_canvas_drag(self, event) -> None:
+        """Move the window and update capture position on every motion tick."""
+        if self._drag_origin is None:
+            return
+        sx0, sy0, wx0, wy0 = self._drag_origin
+        new_x = wx0 + (event.x_root - sx0)
+        new_y = wy0 + (event.y_root - sy0)
+        self.root.geometry(f"+{new_x}+{new_y}")
+        # Update AppState immediately so the capture thread grabs from
+        # the new position on its next tick — live drag content update.
+        self.state.set_position(new_x, new_y)
+
+    def _on_canvas_release(self, event) -> None:
+        """Finalise drag: sync final position and clear drag state."""
+        if self._drag_origin is None:
+            return
+        self._drag_origin = None
+        self.state.set_position(self.root.winfo_x(), self.root.winfo_y())
 
     # ---- Phase 3: capture consumer ----
 
+    def _poll_frame_queue(self) -> None:
+        """Main-thread timer callback: drain the frame queue and display the
+        latest frame. Scheduled only from the main thread via root.after(),
+        so it always runs inside the Tk event loop — never from the capture
+        thread. This is the single place where frames cross the thread
+        boundary safely: the capture thread puts, the main thread gets.
+
+        Drains all pending frames each tick (drops stale frames, displays
+        only the most recent) to avoid a growing backlog when Tk is busy.
+        """
+        img = None
+        while True:
+            try:
+                img = self._frame_queue.get_nowait()
+            except queue.Empty:
+                break
+        if img is not None:
+            self._on_frame(img)
+        self.root.after(16, self._poll_frame_queue)  # ~60 fps poll
+
     def _on_frame(self, img) -> None:
-        """Runs on the Tk main thread (via root.after(0, ...)).
-        Paste the pre-resized PIL.Image into the single reused
-        PhotoImage. Rebuild the PhotoImage only if the bubble has
-        been resized since the last frame (Phase 4 will drive this
-        path via state.set_size)."""
+        """Runs on the Tk main thread, called only from _poll_frame_queue.
+        Paste the pre-resized PIL.Image into the single reused PhotoImage.
+        Rebuild the PhotoImage only if the bubble has been resized since
+        the last frame (Phase 4 will drive this path via state.set_size).
+        """
         if img.size != self._photo_size:
             self._photo = ImageTk.PhotoImage("RGB", img.size)
             self._photo_size = img.size
@@ -319,18 +361,22 @@ class BubbleWindow:
         self._photo.paste(img)
 
     def start_capture(self) -> None:
-        """Create and start the CaptureWorker producer thread.
-        Called from app.main() after BubbleWindow construction
-        returns. Safe to call more than once (no-op on re-call)."""
+        """Create and start the CaptureWorker producer thread, then kick
+        off the main-thread poll loop. Safe to call more than once (no-op).
+
+        The capture thread calls self._frame_queue.put(img) — a stdlib
+        thread-safe operation with no Tk/Tcl involvement. All Tk calls
+        (photo paste, canvas itemconfig) happen exclusively on the main
+        thread via _poll_frame_queue, scheduled with root.after().
+        """
         if self._capture_worker is not None:
             return
         self._capture_worker = CaptureWorker(
             state=self.state,
-            on_frame=lambda img: self.root.after(
-                0, self._on_frame, img
-            ),
+            on_frame=self._frame_queue.put,  # thread-safe; no Tk calls
         )
         self._capture_worker.start()
+        self._poll_frame_queue()  # start the main-thread display loop
 
     # ---- Public teardown ----
 

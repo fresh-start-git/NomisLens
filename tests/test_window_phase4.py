@@ -333,3 +333,110 @@ def test_resize_clamp_on_drag_motion(phase4_bubble):
     assert min_snap.h == 150, f"expected h clamped to 150, got {min_snap.h}"
 
     bubble._on_canvas_release(rel)
+
+
+# =================== HRGN control-visibility bug (Task 3 regression) ===================
+#
+# Bug report (Task 3 human verification): "if you switch it to a circle you
+# lose the buttons and can't revert it back to the rectangle." Root cause:
+# apply_shape("circle", w, h) produced an ellipse inscribed in (0, 0, w, h).
+# The four corners of the bounding rect fall OUTSIDE the ellipse, so the
+# Canvas items drawn in those corners (shape button top-right, zoom-out /
+# zoom-in / resize buttons in the bottom strip) get clipped away by
+# Windows — the pixels are invisible AND mouse events in those corners
+# are blocked by the HRGN. The user cannot tap back to any shape.
+#
+# Fix: window.py passes strip_top=DRAG_STRIP_HEIGHT and
+# strip_bottom=CONTROL_STRIP_HEIGHT to shapes.apply_shape, which CombineRgn-
+# unions the shape with two full-width strip rectangles. The strips remain
+# hittable in their entirety regardless of shape.
+
+
+def test_window_passes_strip_heights_to_apply_shape():
+    """Structural regression guard: every shapes.apply_shape CALL in
+    window.py MUST include strip_top and strip_bottom kwargs.
+
+    Without them, apply_shape falls back to the Phase 2 pure-shape
+    behavior which clips the corners of the control strips away and
+    makes the shape / zoom / resize buttons unreachable in circle mode
+    (Task 3 bug).
+
+    Matches `shapes.apply_shape(` (with opening paren) so comment /
+    docstring mentions of the bare function name don't inflate the count.
+    """
+    src = WINDOW_PATH.read_text(encoding="utf-8")
+    apply_count = src.count("shapes.apply_shape(")
+    assert apply_count >= 2, (
+        f"Expected at least 2 shapes.apply_shape(...) call sites in "
+        f"window.py (initial Step 11 + observer); found {apply_count}"
+    )
+    # Every call must reference strip_top= and strip_bottom=.
+    strip_top_count = src.count("strip_top=DRAG_STRIP_HEIGHT")
+    strip_bot_count = src.count("strip_bottom=CONTROL_STRIP_HEIGHT")
+    assert strip_top_count == apply_count, (
+        f"apply_shape calls: {apply_count}, but only {strip_top_count} "
+        f"pass strip_top=DRAG_STRIP_HEIGHT — every call must include it "
+        f"so controls remain clickable in circle / rounded shapes"
+    )
+    assert strip_bot_count == apply_count, (
+        f"apply_shape calls: {apply_count}, but only {strip_bot_count} "
+        f"pass strip_bottom=CONTROL_STRIP_HEIGHT — every call must "
+        f"include it so bottom controls remain clickable"
+    )
+
+
+@win_only
+def test_all_buttons_hittable_in_every_shape(phase4_bubble):
+    """Task 3 regression: after cycling to each shape in turn, every
+    button rect returned by layout_controls must lie entirely INSIDE
+    the window's HRGN (i.e. mouse events land — Windows does not clip
+    them). This verifies the strip_top / strip_bottom CombineRgn fix.
+
+    For each shape ('rect', 'rounded', 'circle'), we read the HWND's
+    current region via GetWindowRgn and check all 4 corners of every
+    button rect via win32gui.PtInRegion. If PtInRegion returns False
+    for any button corner, the HRGN is clipping that pixel away and
+    the button is unreachable.
+    """
+    import win32gui  # type: ignore[import-not-found]
+    from magnifier_bubble.controls import layout_controls
+
+    bubble, state = phase4_bubble
+    # Reset to a generous baseline so rounded-rect corner math is well-defined.
+    state.set_size(400, 400)
+    bubble.root.update_idletasks()
+    w, h = 400, 400
+    buttons = layout_controls(w, h)
+
+    for shape in ("rect", "rounded", "circle"):
+        state.set_shape(shape)
+        bubble.root.update_idletasks()
+        # Fresh region handle each iteration; GetWindowRgn requires a
+        # pre-existing HRGN to copy into.
+        rgn = win32gui.CreateRectRgnIndirect((0, 0, 1, 1))
+        try:
+            rc = win32gui.GetWindowRgn(bubble._hwnd, rgn)
+            # GetWindowRgn returns region type; 0 = ERROR, 1 = NULLREGION.
+            assert rc not in (0, 1), (
+                f"GetWindowRgn returned {rc} for shape={shape!r} "
+                f"(0=ERROR, 1=NULLREGION)"
+            )
+            for btn in buttons:
+                # Sample the 4 corners of the button + its center (5 points).
+                # If ANY fail, the control is partly/fully clipped.
+                pts = [
+                    (btn.x + 1,              btn.y + 1),
+                    (btn.x + btn.w - 1,      btn.y + 1),
+                    (btn.x + 1,              btn.y + btn.h - 1),
+                    (btn.x + btn.w - 1,      btn.y + btn.h - 1),
+                    (btn.x + btn.w // 2,     btn.y + btn.h // 2),
+                ]
+                for (px, py) in pts:
+                    inside = win32gui.PtInRegion(rgn, px, py)
+                    assert inside, (
+                        f"shape={shape!r} button={btn.name!r} point="
+                        f"({px},{py}) is OUTSIDE the window HRGN — "
+                        f"Windows will clip the click. Task 3 regression."
+                    )
+        finally:
+            win32gui.DeleteObject(rgn)

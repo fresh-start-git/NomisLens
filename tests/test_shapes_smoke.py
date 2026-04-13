@@ -33,12 +33,28 @@ def test_rounded_radius_is_40():
 
 
 def test_apply_shape_signature_locked():
+    """The first 4 params are locked for Plan 03 + Phase 4 call-site
+    stability. Phase 4 Plan 02 adds two OPTIONAL strip-aware kwargs
+    (strip_top, strip_bottom) so the shape HRGN can be unioned with the
+    top + bottom control strips — without this, circle/rounded clip the
+    control-button corners and make the shape button unreachable
+    (Task 3 bug). The new kwargs default to 0 so Phase 2/3 callers
+    that pass only the first 4 args continue to work unchanged.
+    """
     sig = inspect.signature(shapes.apply_shape)
     params = list(sig.parameters.keys())
-    assert params == ["hwnd", "w", "h", "shape"], (
-        f"apply_shape params are {params}; Plan 03 and Phase 4 both expect "
-        f"['hwnd', 'w', 'h', 'shape']"
+    assert params[:4] == ["hwnd", "w", "h", "shape"], (
+        f"apply_shape first 4 params are {params[:4]}; "
+        f"Plan 03 and Phase 4 both expect ['hwnd', 'w', 'h', 'shape']"
     )
+    # Any additional params must be keyword-able with defaults so
+    # existing callers work unchanged.
+    for extra_name in params[4:]:
+        extra = sig.parameters[extra_name]
+        assert extra.default is not inspect.Parameter.empty, (
+            f"apply_shape extra param {extra_name!r} has no default — "
+            f"this would break existing Phase 2/3 call sites"
+        )
 
 
 def test_apply_shape_raises_valueerror_for_unknown_shape():
@@ -68,14 +84,44 @@ def test_source_has_failure_branch_with_deleteobject():
 
 
 def test_source_does_not_deleteobject_on_success():
-    """The code must NOT call DeleteObject outside the failure branch.
-    The critical Pitfall 6 fix is that a successful SetWindowRgn transfers
-    ownership to the OS. A second DeleteObject would double-free."""
+    """The code must NOT call DeleteObject on the FINAL HRGN passed to
+    SetWindowRgn after success. The critical Pitfall 6 fix is that a
+    successful SetWindowRgn transfers ownership to the OS. A second
+    DeleteObject on that handle would double-free.
+
+    The Phase 4 bug fix introduced CombineRgn to union the shape with
+    the top + bottom strip rectangles (see shapes.apply_shape strip_top /
+    strip_bottom kwargs). Intermediate HRGNs (top strip rect, bottom strip
+    rect, the original shape region after it has been copied into the
+    combined dest) ARE owned by us and MUST be DeleteObject'd — those
+    calls are legitimate and must NOT count toward this invariant.
+
+    Invariant enforced here: the one DeleteObject call that references
+    the FINAL `rgn` variable lives inside the `if result == 0:` failure
+    branch. There is exactly one `DeleteObject(rgn)` pattern in the file.
+    Intermediate cleanup uses different variable names (top_rgn, bot_rgn,
+    shape_rgn) so it cannot accidentally be conflated with the final-
+    region release.
+    """
     src = SHAPES_PATH.read_text(encoding="utf-8")
-    # Exactly one DeleteObject call, inside the failure branch
-    assert src.count("DeleteObject(") == 1, (
-        f"shapes.py should have exactly one DeleteObject call (failure branch); "
-        f"found {src.count('DeleteObject(')}"
+    # Exactly one DeleteObject of the FINAL region variable `rgn`.
+    # (Intermediate regions use different names and are allowed to be
+    # deleted any number of times without violating Pitfall 6.)
+    assert src.count("DeleteObject(rgn)") == 1, (
+        f"shapes.py should have exactly one DeleteObject(rgn) call (the "
+        f"failure-branch release of the final SetWindowRgn candidate); "
+        f"found {src.count('DeleteObject(rgn)')}"
+    )
+    # The one DeleteObject(rgn) call must sit inside the `if result == 0:`
+    # failure branch — structural check to guarantee it is not on the
+    # success path.
+    idx_fail = src.find("if result == 0:")
+    idx_final_delete = src.find("DeleteObject(rgn)")
+    assert idx_fail != -1, "missing `if result == 0:` failure branch"
+    assert idx_final_delete != -1, "missing `DeleteObject(rgn)` call"
+    assert idx_final_delete > idx_fail, (
+        "DeleteObject(rgn) must appear AFTER the `if result == 0:` line "
+        "so it only runs when SetWindowRgn failed"
     )
 
 

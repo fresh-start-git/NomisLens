@@ -343,8 +343,16 @@ class BubbleWindow:
             )
 
         # --- Step 11: Apply shape mask (SetWindowRgn clips corners) ---
+        # Phase 4 bug fix: strip_top / strip_bottom arguments UNION the
+        # shape region with the full-width drag + control strips, so the
+        # shape button (top-right corner) and zoom/resize buttons (bottom
+        # corners) remain visible AND clickable when the shape is circle
+        # or rounded. Without this, cycling to "circle" clipped the
+        # corners away and the user could not tap back out.
         if sys.platform == "win32" and self._hwnd:
-            shapes.apply_shape(self._hwnd, snap.w, snap.h, snap.shape)
+            shapes.apply_shape(self._hwnd, snap.w, snap.h, snap.shape,
+                               strip_top=DRAG_STRIP_HEIGHT,
+                               strip_bottom=CONTROL_STRIP_HEIGHT)
 
         # --- Manual-geometry drag for the top strip ---
         # WS_EX_NOACTIVATE windows cannot use the OS-managed caption-drag
@@ -489,12 +497,24 @@ class BubbleWindow:
         snap = self.state.snapshot()
         prev = self._prev_snap
         if snap.shape != prev.shape and sys.platform == "win32" and self._hwnd:
-            shapes.apply_shape(self._hwnd, snap.w, snap.h, snap.shape)
+            # Strip-aware HRGN — union with top + bottom strip rects so
+            # the shape / zoom / resize buttons in the corners remain
+            # clickable even in circle / rounded modes (bug: cycling into
+            # circle clipped the control corners away).
+            shapes.apply_shape(
+                self._hwnd, snap.w, snap.h, snap.shape,
+                strip_top=DRAG_STRIP_HEIGHT,
+                strip_bottom=CONTROL_STRIP_HEIGHT,
+            )
             self._canvas.delete(self._border_id)
             self._border_id = self._draw_border(snap.w, snap.h, snap.shape)
         if (snap.w, snap.h) != (prev.w, prev.h):
             if sys.platform == "win32" and self._hwnd:
-                shapes.apply_shape(self._hwnd, snap.w, snap.h, snap.shape)
+                shapes.apply_shape(
+                    self._hwnd, snap.w, snap.h, snap.shape,
+                    strip_top=DRAG_STRIP_HEIGHT,
+                    strip_bottom=CONTROL_STRIP_HEIGHT,
+                )
             self._buttons = layout_controls(snap.w, snap.h)
             self._relayout_canvas_items(snap.w, snap.h, snap.shape)
         if snap.zoom != prev.zoom:

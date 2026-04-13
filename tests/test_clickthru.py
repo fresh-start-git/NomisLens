@@ -20,6 +20,10 @@ CLICKTHRU_PATH = (
     pathlib.Path(__file__).resolve().parent.parent
     / "src" / "magnifier_bubble" / "clickthru.py"
 )
+APP_PATH = (
+    pathlib.Path(__file__).resolve().parent.parent
+    / "src" / "magnifier_bubble" / "app.py"
+)
 
 
 def _read_clickthru_source() -> str:
@@ -125,6 +129,21 @@ def test_clickthru_self_hwnd_guard_present():
     assert "target == own_hwnd" in src, (
         "clickthru.py must compare target to own_hwnd and early-return "
         "False - belt-and-suspenders against CWP_SKIPTRANSPARENT gaps"
+    )
+
+
+def test_app_parses_no_click_injection_flag():
+    """Plan 04-03: app.py gains argparse for --no-click-injection and
+    forwards the negated value as click_injection_enabled to BubbleWindow.
+    """
+    src = APP_PATH.read_text(encoding="utf-8")
+    assert "argparse" in src, "app.py must import argparse"
+    assert "--no-click-injection" in src, (
+        "app.py must expose the --no-click-injection CLI flag"
+    )
+    assert "click_injection_enabled=not args.no_click_injection" in src, (
+        "app.py must wire args.no_click_injection into BubbleWindow "
+        "as click_injection_enabled=not args.no_click_injection"
     )
 
 

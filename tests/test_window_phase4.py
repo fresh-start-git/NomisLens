@@ -440,3 +440,122 @@ def test_all_buttons_hittable_in_every_shape(phase4_bubble):
                     )
         finally:
             win32gui.DeleteObject(rgn)
+
+
+# =================== Plan 04-03: click injection wiring ===================
+
+
+def test_bubble_window_accepts_click_injection_enabled_kwarg():
+    """Plan 04-03: BubbleWindow.__init__ gains a keyword-only
+    click_injection_enabled: bool = True parameter, stored on
+    self._click_injection_enabled.
+
+    Structural — we check the source, not a live construction, because
+    constructing a BubbleWindow requires Tk + win32 surface.
+    """
+    src = WINDOW_PATH.read_text(encoding="utf-8")
+    assert "click_injection_enabled: bool = True" in src, (
+        "BubbleWindow.__init__ must accept click_injection_enabled: "
+        "bool = True as a keyword-only parameter"
+    )
+    assert "self._click_injection_enabled" in src, (
+        "window.py must store the flag on self._click_injection_enabled"
+    )
+    assert "from magnifier_bubble.clickthru import inject_click" in src, (
+        "window.py must import inject_click (deferred, inside the "
+        "content-zone branch of _on_canvas_press)"
+    )
+
+
+@win_only
+def test_content_zone_click_invokes_inject_click_when_enabled(phase4_bubble, monkeypatch):
+    """A click in the middle band (between the drag strip and the
+    control strip) must invoke inject_click when the flag is True.
+    """
+    from magnifier_bubble import clickthru
+
+    bubble, state = phase4_bubble
+    state.set_size(400, 400)
+    # AppState observer resizes the canvas but not the root window itself
+    # (the root is sized only via _on_canvas_drag's geometry() call).
+    # Force the root to 400x400 so self.root.winfo_height() returns 400
+    # inside _on_canvas_press's middle-band check.
+    bubble.root.geometry("400x400+100+100")
+    bubble._click_injection_enabled = True
+    bubble.root.update_idletasks()
+    # Clear any stale drag/resize origin from prior tests in the module.
+    bubble._drag_origin = None
+    bubble._resize_origin = None
+
+    calls = []
+
+    def fake_inject_click(sx, sy, hwnd):
+        calls.append((sx, sy, hwnd))
+        return True
+
+    # window.py's deferred import resolves `magnifier_bubble.clickthru`
+    # via sys.modules — patch the inject_click attribute on the module
+    # so the deferred import picks up the fake.
+    monkeypatch.setattr(clickthru, "inject_click", fake_inject_click)
+
+    class FakeEvent:
+        pass
+
+    ev = FakeEvent()
+    ev.x = 200
+    ev.y = 200  # middle band (44 <= y < 400-44)
+    ev.x_root = 100 + 200  # root @ x=100 per geometry() above
+    ev.y_root = 100 + 200
+
+    bubble._on_canvas_press(ev)
+
+    assert len(calls) == 1, f"expected 1 inject_click call, got {len(calls)}"
+    assert calls[0] == (ev.x_root, ev.y_root, bubble._hwnd), (
+        f"inject_click args: {calls[0]} "
+        f"(expected ({ev.x_root}, {ev.y_root}, {bubble._hwnd}))"
+    )
+
+
+@win_only
+def test_content_zone_click_does_nothing_when_injection_disabled(phase4_bubble, monkeypatch):
+    """When click_injection_enabled=False, middle-band clicks must NOT
+    invoke inject_click — Phase 2 fallback behavior.
+    """
+    from magnifier_bubble import clickthru
+
+    bubble, state = phase4_bubble
+    state.set_size(400, 400)
+    bubble.root.geometry("400x400+100+100")
+    bubble._click_injection_enabled = False  # disable for this test
+    bubble.root.update_idletasks()
+    bubble._drag_origin = None
+    bubble._resize_origin = None
+
+    calls = []
+
+    def fake_inject_click(*args, **kwargs):
+        calls.append(args)
+        return True
+
+    monkeypatch.setattr(clickthru, "inject_click", fake_inject_click)
+
+    class FakeEvent:
+        pass
+
+    ev = FakeEvent()
+    ev.x = 200
+    ev.y = 200
+    ev.x_root = 100 + 200
+    ev.y_root = 100 + 200
+
+    try:
+        bubble._on_canvas_press(ev)
+    finally:
+        # Restore default so subsequent tests in this module see the
+        # shared fixture with injection on.
+        bubble._click_injection_enabled = True
+
+    assert calls == [], (
+        f"inject_click must NOT be called when injection is disabled; "
+        f"got {calls}"
+    )

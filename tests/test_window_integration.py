@@ -43,9 +43,29 @@ WINDOW_PATH = (
 # ========== Structural lints (every platform) ==========
 
 def test_bubblewindow_constructor_signature():
+    """BubbleWindow.__init__'s first two positional params MUST stay
+    (self, state) so every Phase 1-3 call site keeps working. Keyword-only
+    additions with defaults are allowed (Phase 4-03 added
+    click_injection_enabled: bool = True for the --no-click-injection
+    CLI fallback).
+
+    Mirrors the Phase 4-02 relaxation of test_apply_shape_signature_locked
+    in tests/test_shapes_smoke.py: lock the first N positional params,
+    allow extras iff they have defaults.
+    """
     sig = inspect.signature(BubbleWindow.__init__)
-    params = list(sig.parameters.keys())
-    assert params == ["self", "state"], f"expected ['self', 'state'], got {params}"
+    params = list(sig.parameters.values())
+    names = [p.name for p in params]
+    # Lock the first 2: self, state.
+    assert names[:2] == ["self", "state"], (
+        f"first 2 params must be ['self', 'state']; got {names[:2]}"
+    )
+    # Any extras must have defaults so pre-Phase-4 call sites keep working.
+    for p in params[2:]:
+        assert p.default is not inspect.Parameter.empty, (
+            f"BubbleWindow.__init__ extra param {p.name!r} has no default "
+            f"— Phase 1-3 call sites would break"
+        )
 
 
 def test_visual_constants_locked():

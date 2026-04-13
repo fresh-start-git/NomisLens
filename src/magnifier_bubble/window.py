@@ -106,8 +106,20 @@ class BubbleWindow:
     self.root.mainloop() (from app.main) to drive the Tk event loop.
     """
 
-    def __init__(self, state: AppState) -> None:
+    def __init__(
+        self,
+        state: AppState,
+        *,
+        click_injection_enabled: bool = True,
+    ) -> None:
         self.state: AppState = state
+        # Phase 4 Plan 03: cross-process click injection toggle. When True
+        # (default), content-zone clicks on the bubble are forwarded to the
+        # app below via PostMessageW. When False (set by app.py from the
+        # --no-click-injection CLI flag), content-zone clicks are consumed
+        # by the bubble — Phase 2 fallback behavior, documented in
+        # 04-RESEARCH.md Open Question #1.
+        self._click_injection_enabled: bool = click_injection_enabled
         self._wndproc_keepalive: wndproc.WndProcKeepalive | None = None
         self._canvas_wndproc_keepalive: wndproc.WndProcKeepalive | None = None
         self._frame_wndproc_keepalive: wndproc.WndProcKeepalive | None = None
@@ -413,12 +425,15 @@ class BubbleWindow:
         )
 
     def _on_canvas_press(self, event) -> None:
-        """Phase 4 dispatch: button hit-test first, then drag fallback.
+        """Phase 4 dispatch: button hit-test first, then drag, then
+        Plan 04-03 content-zone click injection.
 
         Order of checks (first match wins):
           1. controls.hit_button -> named button dispatch
           2. top-strip y < DRAG_STRIP_HEIGHT -> Phase 3 drag start
-          3. otherwise -> no-op (Plan 04-03 wires click injection here)
+          3. middle band + click_injection_enabled -> inject_click to
+             the app below via PostMessageW (Plan 04-03 / Pattern 6)
+          4. otherwise -> no-op (bottom strip without a button hit)
         """
         btn = hit_button(event.x, event.y, self._buttons)
         if btn == "shape":
@@ -437,13 +452,29 @@ class BubbleWindow:
                 event.x_root, event.y_root, snap.w, snap.h,
             )
             return
-        # No button — existing Phase 3 drag-start (unchanged)
-        if event.y >= DRAG_STRIP_HEIGHT:
+        # No button — Phase 3 drag-start for the top strip
+        if event.y < DRAG_STRIP_HEIGHT:
+            self._drag_origin = (
+                event.x_root, event.y_root,
+                self.root.winfo_x(), self.root.winfo_y(),
+            )
             return
-        self._drag_origin = (
-            event.x_root, event.y_root,
-            self.root.winfo_x(), self.root.winfo_y(),
-        )
+        # Phase 4 Plan 03: content-zone click injection.
+        # The middle band is everything between the drag strip and the
+        # control strip. If a click lands here (no button hit), forward
+        # it to whatever app is below us via PostMessageW. The self-HWND
+        # guard inside inject_click (Pitfall I) prevents recursion into
+        # our own layered bubble. Import is deferred so clickthru.py's
+        # Windows-only ctypes surface stays out of window.py's module-
+        # level import graph on non-Windows CI.
+        if (
+            self._click_injection_enabled
+            and sys.platform == "win32"
+            and self._hwnd
+            and DRAG_STRIP_HEIGHT <= event.y < (self.root.winfo_height() - CONTROL_STRIP_HEIGHT)
+        ):
+            from magnifier_bubble.clickthru import inject_click
+            inject_click(event.x_root, event.y_root, self._hwnd)
 
     def _on_canvas_drag(self, event) -> None:
         """Phase 4 amended: resize drag takes precedence over move drag.

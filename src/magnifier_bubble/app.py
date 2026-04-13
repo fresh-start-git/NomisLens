@@ -4,6 +4,11 @@ Replaces the Phase 1 scaffold body: we now construct a BubbleWindow and
 drive the Tk mainloop. main.py's first-line DPI call (OVER-05) is still
 the caller; this file does NOT touch DPI.
 
+Phase 4 Plan 03 additions:
+- argparse for --no-click-injection (falls back to Phase 2 behavior
+  when PostMessageW injection misbehaves against a target — e.g.
+  Cornerstone, per research Open Question #1).
+
 Smoke test escape hatch: if ULTIMATE_ZOOM_SMOKE=1 is set in the
 environment, we schedule root.after(50, bubble.destroy) so the process
 exits cleanly within ~100 ms. This keeps the Phase 1 test_main_entry.py
@@ -13,6 +18,7 @@ the user closes the bubble.
 """
 from __future__ import annotations
 
+import argparse
 import os
 
 from magnifier_bubble import dpi
@@ -21,6 +27,20 @@ from magnifier_bubble.window import BubbleWindow
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Ultimate Zoom - floating magnifier bubble"
+    )
+    parser.add_argument(
+        "--no-click-injection",
+        action="store_true",
+        help=(
+            "Disable cross-process click injection. Middle-zone clicks "
+            "will be consumed by the bubble (Phase 2 fallback behavior). "
+            "Use if PostMessageW injection misbehaves against Cornerstone."
+        ),
+    )
+    args = parser.parse_args()
+
     # Observable proof that PMv2 survived the Phase 2 Tk + ctypes imports.
     dpi.debug_print()
 
@@ -28,12 +48,17 @@ def main() -> int:
     state = AppState(StateSnapshot())
 
     # Phase 2: create the bubble and drive the Tk event loop.
-    bubble = BubbleWindow(state)
+    # Phase 4 Plan 03: click_injection_enabled is wired from the CLI flag.
+    bubble = BubbleWindow(
+        state,
+        click_injection_enabled=not args.no_click_injection,
+    )
     print(
         f"[bubble] hwnd={bubble._hwnd} "
         f"geometry={state.snapshot().w}x{state.snapshot().h}"
         f"+{state.snapshot().x}+{state.snapshot().y} "
-        f"shape={state.snapshot().shape}"
+        f"shape={state.snapshot().shape} "
+        f"click_injection={bubble._click_injection_enabled}"
     )
 
     # Phase 3: start the 30 fps capture producer thread.

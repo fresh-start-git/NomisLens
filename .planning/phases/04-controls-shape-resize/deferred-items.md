@@ -56,3 +56,27 @@ the plan's work; they predate the plan.
   owns the single process-wide `tk.Tk()`, and migrate every Windows-only
   test file to consume it via a `Toplevel`-per-test pattern. Out of scope
   for Plan 04-02.
+
+## From Plan 04-03 execution (2026-04-13)
+
+### 3. `test_source_has_pattern_2b_drag_workaround` — still failing (same pre-existing issue as item 1)
+
+- **State:** Still failing at the start of Plan 04-03 execution — verified
+  by `git stash` + rerun on parent commit `94f9c94`. This is the SAME
+  pre-existing Phase 2b failure logged under item 1 above, carried
+  forward because Plan 04-02 did not (and could not) fix it.
+- **Recommendation:** Delete or rewrite the test in a follow-up cleanup
+  plan. Plan 04-03 did NOT introduce this failure. Scope boundary holds.
+
+### 4. Full-suite `pytest tests/` — same 23 Tk churn errors (same pre-existing issue as item 2)
+
+- **State:** Plan 04-03 adds 7 new tests (4 Windows-only smoke in
+  `test_clickthru.py` + 1 structural in `test_clickthru.py` for the
+  app.py argparse wiring + 3 new `test_window_phase4.py` entries). All
+  15/15 `test_clickthru.py` and 17/17 `test_window_phase4.py` pass in
+  isolation. The only full-suite failures are the same Tk-churn ERROR
+  lines from module-setup fixtures that were already documented in
+  item 2 above — Plan 04-03 does not regress the count (observed
+  counts: pre-Plan `23 errors`, post-Plan `23 errors`, same set).
+- **Recommendation:** See item 2. Still deferred to a Phase 8 test-infra
+  plan.

@@ -193,8 +193,16 @@ def test_main_py_runs_and_exits_zero():
     assert "[bubble] hwnd=" in out, (
         f"missing Phase 2 [bubble] line in stdout:\n{out}"
     )
-    assert "[app] phase 2 mainloop exited" in out, (
-        f"missing Phase 2 [app] exit line in stdout:\n{out}"
+    # Phase 5: goodbye line now references "phase 5" because app.py
+    # was rewritten to wire config.load + ConfigWriter into main().
+    assert "[app] phase 5 mainloop exited" in out, (
+        f"missing Phase 5 [app] exit line in stdout:\n{out}"
+    )
+    # Phase 5 PERS-01 proof: config.load runs and prints before the
+    # bubble appears, so the stdout stream must contain a [config]
+    # line from app.py's resolved-path print.
+    assert "[config] loaded path=" in out, (
+        f"missing Phase 5 [config] loaded line in stdout:\n{out}"
     )
 
 
@@ -218,3 +226,76 @@ def test_main_py_dpi_line_contains_physical_dimensions():
     pw = int(m.group(1))
     ph = int(m.group(2))
     assert pw > 0 and ph > 0
+
+
+# ---- Phase 5 structural lints (Plan 05-02 Task 1) ----
+
+
+def test_app_loads_config_before_state():
+    """PERS-03 structural guarantee: config.load(...) must appear
+    earlier in app.main() than AppState(...), or restore-on-launch
+    is silently defaulted away.
+
+    Scans the source of magnifier_bubble.app for the first line of
+    each call; asserts load's line < AppState's line.
+    """
+    import ast
+    import inspect
+    from magnifier_bubble import app
+
+    src = inspect.getsource(app)
+    tree = ast.parse(src)
+
+    load_lines: list[int] = []
+    appstate_lines: list[int] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            # config.load(...)
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "load"
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "config"
+            ):
+                load_lines.append(node.lineno)
+            # AppState(...)
+            if isinstance(func, ast.Name) and func.id == "AppState":
+                appstate_lines.append(node.lineno)
+
+    assert load_lines, (
+        "app.py must call config.load(...) (PERS-03); none found"
+    )
+    assert appstate_lines, (
+        "app.py must call AppState(...) somewhere; none found"
+    )
+    assert min(load_lines) < min(appstate_lines), (
+        f"config.load must precede AppState construction in app.py; "
+        f"got load at line {min(load_lines)} "
+        f"and AppState at line {min(appstate_lines)}"
+    )
+
+
+def test_app_wires_config_writer():
+    """PERS-02 + PERS-04 structural guarantee: app.main() must
+    construct ConfigWriter AND hand it to the bubble via
+    attach_config_writer.  If either is missing, debounced writes
+    and shutdown flushes silently regress to no-ops.
+    """
+    import inspect
+    from magnifier_bubble import app
+
+    src = inspect.getsource(app)
+    assert "config.ConfigWriter(" in src, (
+        "app.py must construct config.ConfigWriter(state, bubble.root, path) "
+        "for PERS-02 debounced persistence"
+    )
+    assert "attach_config_writer(" in src, (
+        "app.py must call bubble.attach_config_writer(writer) for "
+        "PERS-04 shutdown flush; without it destroy() cannot flush "
+        "pending writes before Tk teardown"
+    )
+    assert "writer.register()" in src, (
+        "app.py must call writer.register() to attach the "
+        "AppState.on_change observer (PERS-02)"
+    )

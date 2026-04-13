@@ -42,6 +42,14 @@ from PIL import ImageTk
 from magnifier_bubble import shapes, wndproc
 from magnifier_bubble import winconst as wc
 from magnifier_bubble.capture import CaptureWorker
+from magnifier_bubble.controls import (
+    ButtonRect,
+    SHAPE_CYCLE,
+    hit_button,
+    layout_controls,
+    resize_clamp,
+    zoom_step,
+)
 from magnifier_bubble.hit_test import compute_zone
 from magnifier_bubble.state import AppState
 
@@ -216,6 +224,96 @@ class BubbleWindow:
         )
         self._canvas.tag_lower(self._image_id)
 
+        # --- Step 9c (Phase 4): button layout + glyphs + zoom text ---
+        # All controls are Canvas items (rectangle + text pairs). Adding
+        # a Tk Button-style widget here would create a 4th HWND in the
+        # WndProc chain (Pitfall 11) — the structural lint in
+        # tests/test_window_phase4.py enforces the no-widget rule.
+        # Press routing happens in _on_canvas_press via controls.hit_button.
+        self._buttons: list[ButtonRect] = layout_controls(snap.w, snap.h)
+
+        # Grip glyph (CTRL-01) — centered in the top strip's left region,
+        # so the ≡ sits to the LEFT of the rightmost 44 px (which is the
+        # shape button's zone).
+        grip_cx = (snap.w - 44) // 2
+        grip_cy = DRAG_STRIP_HEIGHT // 2
+        self._grip_id: int = self._canvas.create_text(
+            grip_cx, grip_cy,
+            text="\u2261",  # ≡ U+2261 IDENTICAL TO (grip indicator)
+            fill=BORDER_COLOR,
+            font=("Segoe UI Symbol", 20, "bold"),
+        )
+
+        # Shape button (CTRL-02) — top-right 44x44, bullseye glyph.
+        # layout_controls returns [shape, zoom_out, zoom_in, resize].
+        shape_btn = self._buttons[0]
+        self._shape_btn_rect_id: int = self._canvas.create_rectangle(
+            shape_btn.x, shape_btn.y,
+            shape_btn.x + shape_btn.w, shape_btn.y + shape_btn.h,
+            fill=STRIP_COLOR, outline=BORDER_COLOR, width=1,
+        )
+        self._shape_btn_text_id: int = self._canvas.create_text(
+            shape_btn.x + shape_btn.w // 2, shape_btn.y + shape_btn.h // 2,
+            text="\u25ce",  # U+25CE BULLSEYE (shape-cycle indicator)
+            fill=BORDER_COLOR, font=("Segoe UI Symbol", 22, "bold"),
+        )
+
+        # Zoom-out button [−] (CTRL-04) — bottom-left 44x44.
+        zoom_out_btn = self._buttons[1]
+        self._zoom_out_rect_id: int = self._canvas.create_rectangle(
+            zoom_out_btn.x, zoom_out_btn.y,
+            zoom_out_btn.x + zoom_out_btn.w, zoom_out_btn.y + zoom_out_btn.h,
+            fill=STRIP_COLOR, outline=BORDER_COLOR, width=1,
+        )
+        self._zoom_out_text_id: int = self._canvas.create_text(
+            zoom_out_btn.x + zoom_out_btn.w // 2,
+            zoom_out_btn.y + zoom_out_btn.h // 2,
+            text="\u2212",  # − U+2212 MINUS SIGN
+            fill=BORDER_COLOR, font=("Segoe UI Symbol", 22, "bold"),
+        )
+
+        # Zoom-in button [+] (CTRL-04) — bottom 44x44 at x = w - 88.
+        zoom_in_btn = self._buttons[2]
+        self._zoom_in_rect_id: int = self._canvas.create_rectangle(
+            zoom_in_btn.x, zoom_in_btn.y,
+            zoom_in_btn.x + zoom_in_btn.w, zoom_in_btn.y + zoom_in_btn.h,
+            fill=STRIP_COLOR, outline=BORDER_COLOR, width=1,
+        )
+        self._zoom_in_text_id: int = self._canvas.create_text(
+            zoom_in_btn.x + zoom_in_btn.w // 2,
+            zoom_in_btn.y + zoom_in_btn.h // 2,
+            text="+",  # U+002B PLUS SIGN
+            fill=BORDER_COLOR, font=("Segoe UI Symbol", 22, "bold"),
+        )
+
+        # Live zoom value text (CTRL-04) — centered between zoom buttons.
+        zoom_text_cx = (zoom_out_btn.x + zoom_out_btn.w + zoom_in_btn.x) // 2
+        zoom_text_cy = zoom_out_btn.y + zoom_out_btn.h // 2
+        self._zoom_text_id: int = self._canvas.create_text(
+            zoom_text_cx, zoom_text_cy,
+            text=f"{snap.zoom:.2f}x",
+            fill=BORDER_COLOR,
+            font=("Segoe UI Symbol", 14, "bold"),
+        )
+
+        # Resize button [⤢] (CTRL-06/07) — bottom-right 44x44.
+        resize_btn = self._buttons[3]
+        self._resize_btn_rect_id: int = self._canvas.create_rectangle(
+            resize_btn.x, resize_btn.y,
+            resize_btn.x + resize_btn.w, resize_btn.y + resize_btn.h,
+            fill=STRIP_COLOR, outline=BORDER_COLOR, width=1,
+        )
+        self._resize_btn_text_id: int = self._canvas.create_text(
+            resize_btn.x + resize_btn.w // 2, resize_btn.y + resize_btn.h // 2,
+            text="\u2922",  # ⤢ U+2922 NORTH EAST AND SOUTH WEST ARROW
+            fill=BORDER_COLOR, font=("Segoe UI Symbol", 20, "bold"),
+        )
+
+        # Phase 4 resize-drag origin (separate state machine from _drag_origin).
+        # Set by _on_canvas_press when event lands in resize button; consumed
+        # by _on_canvas_drag (Task 2); cleared by _on_canvas_release.
+        self._resize_origin: tuple[int, int, int, int] | None = None
+
         # --- Step 10: Install WndProc subclasses ---
         # Windows delivers WM_NCHITTEST to the topmost HWND at the cursor.
         # Tk creates three Win32 windows that stack as follows (outermost first):
@@ -270,6 +368,14 @@ class BubbleWindow:
         # --- Step 12: Show the window ---
         self.root.deiconify()
 
+        # --- Step 13 (Phase 4): register state observer for shape/size/zoom ---
+        # Stores a snapshot to diff against on every notification so the
+        # observer knows which of (shape, w, h, zoom) changed. Tk button
+        # handlers fire state.set_* from the main thread, so the observer
+        # callback also runs on the main thread — safe to call Tk APIs.
+        self._prev_snap = self.state.snapshot()
+        self.state.on_change(self._on_state_change)
+
         # Phase 3: capture worker placeholder (started by app.py via start_capture)
         self._capture_worker: CaptureWorker | None = None
 
@@ -299,7 +405,31 @@ class BubbleWindow:
         )
 
     def _on_canvas_press(self, event) -> None:
-        """Record drag origin when the press lands on the top strip."""
+        """Phase 4 dispatch: button hit-test first, then drag fallback.
+
+        Order of checks (first match wins):
+          1. controls.hit_button -> named button dispatch
+          2. top-strip y < DRAG_STRIP_HEIGHT -> Phase 3 drag start
+          3. otherwise -> no-op (Plan 04-03 wires click injection here)
+        """
+        btn = hit_button(event.x, event.y, self._buttons)
+        if btn == "shape":
+            cur_shape = self.state.snapshot().shape
+            self.state.set_shape(SHAPE_CYCLE[cur_shape])
+            return
+        if btn == "zoom_in":
+            self.state.set_zoom(zoom_step(self.state.snapshot().zoom, +1))
+            return
+        if btn == "zoom_out":
+            self.state.set_zoom(zoom_step(self.state.snapshot().zoom, -1))
+            return
+        if btn == "resize":
+            snap = self.state.snapshot()
+            self._resize_origin = (
+                event.x_root, event.y_root, snap.w, snap.h,
+            )
+            return
+        # No button — existing Phase 3 drag-start (unchanged)
         if event.y >= DRAG_STRIP_HEIGHT:
             return
         self._drag_origin = (
@@ -325,6 +455,90 @@ class BubbleWindow:
             return
         self._drag_origin = None
         self.state.set_position(self.root.winfo_x(), self.root.winfo_y())
+
+    # ---- Phase 4: AppState observer + canvas relayout ----
+
+    def _on_state_change(self) -> None:
+        """AppState observer. Runs on the Tk main thread because every
+        state.set_* caller is a Tk event binding. MUST NOT call state.set_*
+        or the observer loops (Pitfall G — re-entrancy).
+
+        Diffs against self._prev_snap to determine which of shape / size /
+        zoom changed, then applies the corresponding visual update.
+        """
+        snap = self.state.snapshot()
+        prev = self._prev_snap
+        if snap.shape != prev.shape and sys.platform == "win32" and self._hwnd:
+            shapes.apply_shape(self._hwnd, snap.w, snap.h, snap.shape)
+            self._canvas.delete(self._border_id)
+            self._border_id = self._draw_border(snap.w, snap.h, snap.shape)
+        if (snap.w, snap.h) != (prev.w, prev.h):
+            if sys.platform == "win32" and self._hwnd:
+                shapes.apply_shape(self._hwnd, snap.w, snap.h, snap.shape)
+            self._buttons = layout_controls(snap.w, snap.h)
+            self._relayout_canvas_items(snap.w, snap.h, snap.shape)
+        if snap.zoom != prev.zoom:
+            self._canvas.itemconfig(
+                self._zoom_text_id, text=f"{snap.zoom:.2f}x"
+            )
+        self._prev_snap = snap
+
+    def _relayout_canvas_items(self, w: int, h: int, shape: str) -> None:
+        """Move every canvas item to match the new window size.
+
+        Called from _on_state_change on size change. Uses canvas.coords()
+        for items and canvas.configure() for the canvas widget itself.
+        The image item's size is driven by the capture loop's _on_frame
+        size-mismatch path — do NOT rebuild PhotoImage here.
+        """
+        self._canvas.configure(width=w, height=h)
+        # Top + bottom strips
+        self._canvas.coords(self._top_strip_id, 0, 0, w, DRAG_STRIP_HEIGHT)
+        self._canvas.coords(
+            self._bottom_strip_id,
+            0, h - CONTROL_STRIP_HEIGHT, w, h,
+        )
+        # Border — delete and redraw for correct shape/coords
+        self._canvas.delete(self._border_id)
+        self._border_id = self._draw_border(w, h, shape)
+        # Grip glyph — re-center
+        self._canvas.coords(self._grip_id, (w - 44) // 2, DRAG_STRIP_HEIGHT // 2)
+        # Shape button (index 0)
+        sb = self._buttons[0]
+        self._canvas.coords(
+            self._shape_btn_rect_id, sb.x, sb.y, sb.x + sb.w, sb.y + sb.h,
+        )
+        self._canvas.coords(
+            self._shape_btn_text_id, sb.x + sb.w // 2, sb.y + sb.h // 2,
+        )
+        # Zoom-out (index 1)
+        zob = self._buttons[1]
+        self._canvas.coords(
+            self._zoom_out_rect_id, zob.x, zob.y, zob.x + zob.w, zob.y + zob.h,
+        )
+        self._canvas.coords(
+            self._zoom_out_text_id, zob.x + zob.w // 2, zob.y + zob.h // 2,
+        )
+        # Zoom-in (index 2)
+        zib = self._buttons[2]
+        self._canvas.coords(
+            self._zoom_in_rect_id, zib.x, zib.y, zib.x + zib.w, zib.y + zib.h,
+        )
+        self._canvas.coords(
+            self._zoom_in_text_id, zib.x + zib.w // 2, zib.y + zib.h // 2,
+        )
+        # Zoom text — re-center between zoom_out and zoom_in
+        zoom_text_cx = (zob.x + zob.w + zib.x) // 2
+        zoom_text_cy = zob.y + zob.h // 2
+        self._canvas.coords(self._zoom_text_id, zoom_text_cx, zoom_text_cy)
+        # Resize button (index 3)
+        rb = self._buttons[3]
+        self._canvas.coords(
+            self._resize_btn_rect_id, rb.x, rb.y, rb.x + rb.w, rb.y + rb.h,
+        )
+        self._canvas.coords(
+            self._resize_btn_text_id, rb.x + rb.w // 2, rb.y + rb.h // 2,
+        )
 
     # ---- Phase 3: capture consumer ----
 

@@ -16,19 +16,21 @@ Clicks and touches pass through the magnified content area to whatever app is un
 - [x] DPI-correct foundation: `SetProcessDpiAwarenessContext(-4)` as first executable line of main.py — *Validated in Phase 1: Foundation + DPI*
 - [x] AppState container as single source of truth for position, size, zoom, shape, visible — *Validated in Phase 1: Foundation + DPI*
 
-### Active
+### Validated (continued)
 
-- [ ] Always-on-top floating overlay with no taskbar presence
-- [ ] Real-time screen capture (mss) of pixels beneath the bubble at 30fps minimum
-- [ ] Full click-through on the magnified content zone (WS_EX_TRANSPARENT + WS_EX_LAYERED)
-- [ ] Three-zone layout: drag handle top, magnified content middle, zoom controls bottom
-- [ ] Top drag bar: draggable, grip indicator (≡), shape-cycle button (⊙)
-- [ ] Middle zone: shows magnified capture, zero UI chrome, 100% click-through
-- [ ] Bottom strip: [−] / [+] zoom buttons, zoom level display, resize button [⤢]
-- [ ] Zoom range 1.5x–6x in 0.25x increments
-- [ ] Shape cycling: Circle → Rounded Rectangle → Rectangle → (repeat)
-- [ ] Resize via drag handle (bottom-right) and corner grip; min 150×150, max 700×700
-- [ ] All touch targets ≥ 44×44px
+- [x] Always-on-top floating overlay with no taskbar presence — *Validated in Phase 2: Overlay Window*
+- [x] Real-time screen capture (mss) of pixels beneath the bubble at 30fps minimum — *Validated in Phase 3: Capture Loop*
+- [x] Full click-through on the magnified content zone (WS_EX_TRANSPARENT + WS_EX_LAYERED) — *Validated in Phase 2: Overlay Window*
+- [x] Three-zone layout: drag handle top, magnified content middle, zoom controls bottom — *Validated in Phase 4: Controls, Shape & Resize*
+- [x] Top drag bar: draggable, grip indicator (≡), shape-cycle button (⊙) — *Validated in Phase 4: Controls, Shape & Resize*
+- [x] Middle zone: shows magnified capture, zero UI chrome, 100% click-through — *Validated in Phase 4: Controls, Shape & Resize*
+- [x] Bottom strip: [−] / [+] zoom buttons, zoom level display, resize button [⤢] — *Validated in Phase 4: Controls, Shape & Resize*
+- [x] Zoom range 1.5x–6x in 0.25x increments — *Validated in Phase 4: Controls, Shape & Resize*
+- [x] Shape cycling: Circle → Rounded Rectangle → Rectangle → (repeat) — *Validated in Phase 4: Controls, Shape & Resize*
+- [x] Resize via drag handle (bottom-right); min 150×150, max 700×700 — *Validated in Phase 4: Controls, Shape & Resize*
+- [x] All touch targets ≥ 44×44px — *Validated in Phase 4: Controls, Shape & Resize*
+
+### Active
 - [ ] Teal/soft-blue border (3–4px) visible on any background
 - [ ] Semi-transparent dark strips for top/bottom controls
 - [ ] Ctrl+Z global hotkey toggles bubble visible/hidden (works even when Cornerstone has focus)

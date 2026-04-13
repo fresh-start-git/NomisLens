@@ -34,14 +34,14 @@
 ### Controls
 
 - [ ] **CTRL-01**: Top drag bar has a grip indicator (≡ three horizontal lines) and is draggable by finger or mouse to reposition the bubble anywhere on screen
-- [ ] **CTRL-02**: Top drag bar has a shape-cycle button (⊙) that cycles Circle → Rounded Rectangle → Rectangle → Circle
+- [x] **CTRL-02**: Top drag bar has a shape-cycle button (⊙) that cycles Circle → Rounded Rectangle → Rectangle → Circle
 - [ ] **CTRL-03**: Shape masking applied via SetWindowRgn; HRGN not freed after successful call (Windows owns it)
 - [ ] **CTRL-04**: Bottom strip has [−] and [+] zoom buttons with current zoom level displayed between them
-- [ ] **CTRL-05**: Zoom range is 1.5x to 6x in 0.25x increments
+- [x] **CTRL-05**: Zoom range is 1.5x to 6x in 0.25x increments
 - [ ] **CTRL-06**: Bottom strip has a resize button [⤢] in the bottom-right that allows drag-to-resize
 - [ ] **CTRL-07**: Window corner grip (bottom-right of whole window) provides secondary resize via drag
-- [ ] **CTRL-08**: Minimum window size 150×150px; maximum 700×700px
-- [ ] **CTRL-09**: All touch targets are minimum 44×44px for finger use on clinic touchscreen
+- [x] **CTRL-08**: Minimum window size 150×150px; maximum 700×700px
+- [x] **CTRL-09**: All touch targets are minimum 44×44px for finger use on clinic touchscreen
 
 ### Hotkey
 
@@ -127,14 +127,14 @@
 | LAYT-05 | Phase 2 | Complete |
 | LAYT-06 | Phase 2 | Complete |
 | CTRL-01 | Phase 4 | Pending |
-| CTRL-02 | Phase 4 | Pending |
+| CTRL-02 | Phase 4 | Complete |
 | CTRL-03 | Phase 4 | Pending |
 | CTRL-04 | Phase 4 | Pending |
-| CTRL-05 | Phase 4 | Pending |
+| CTRL-05 | Phase 4 | Complete |
 | CTRL-06 | Phase 4 | Pending |
 | CTRL-07 | Phase 4 | Pending |
-| CTRL-08 | Phase 4 | Pending |
-| CTRL-09 | Phase 4 | Pending |
+| CTRL-08 | Phase 4 | Complete |
+| CTRL-09 | Phase 4 | Complete |
 | HOTK-01 | Phase 6 | Pending |
 | HOTK-02 | Phase 6 | Pending |
 | HOTK-03 | Phase 6 | Pending |

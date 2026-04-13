@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-stopped_at: Completed 03-01-PLAN.md (CaptureWorker producer thread + 14 structural tests)
-last_updated: "2026-04-12T11:35:27.576Z"
+status: executing
+stopped_at: Completed 04-01-PLAN.md (pure-Python controls.py + Wave 0 stubs + 100-cycle shapes smoke)
+last_updated: "2026-04-13T01:28:15Z"
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 8
-  completed_plans: 7
+  total_plans: 11
+  completed_plans: 8
 ---
 
 # Project State
@@ -19,32 +19,34 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Clicks and touches pass through the magnified content area to whatever app is underneath — the bubble enhances vision without blocking the workflow.
-**Current focus:** Phase 03 — capture-loop
+**Current focus:** Phase 04 — controls-shape-resize
 
 ## Current Position
 
-Phase: 03 (capture-loop) — EXECUTING
-Plan: 2 of 2
+Phase: 04 (controls-shape-resize) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 4
-- Average duration: 4.75 min
-- Total execution time: 0.32 hours
+- Total plans completed: 8
+- Average duration: ~8 min
+- Total execution time: ~1.1 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation-dpi | 3 | 15 min | 5 min |
-| 02-overlay-window | 1 | 4 min | 4 min |
+| 02-overlay-window | 3 | 78 min | 26 min |
+| 03-capture-loop | 1 | 8 min | 8 min |
+| 04-controls-shape-resize | 1 | 7 min | 7 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 (3 min), 01-02 (3 min), 01-03 (9 min), 02-01 (4 min)
-- Trend: Phase 02 pure-Python plan 01 finished in 4 min with 2 Rule 1 test-code bug fixes (PEP 563 signature, docstring ast skip)
+- Last 5 plans: 02-03 (65 min), 03-01 (8 min), 03-02 (? min), 04-01 (7 min)
+- Trend: Phase 04 pure-Python plan 01 finished in 7 min with 1 Rule 1 bug fix (zoom_step snap-then-add contradicted plan's own test; fixed to ceil/floor-to-grid semantics)
 
 *Updated after each plan completion*
 
@@ -59,6 +61,7 @@ Plan: 2 of 2
 | Phase 02-overlay-window P02 | 9 min | 2 tasks | 5 files |
 | Phase 02-overlay-window P03 | 65 | 3 tasks | 7 files |
 | Phase 03 P01 | 8 | 3 tasks | 3 files |
+| Phase 04-controls-shape-resize P01 | 7 min | 3 tasks (TDD for 1+2) | 5 files |
 
 ## Accumulated Context
 
@@ -99,6 +102,12 @@ Recent decisions affecting current work:
 - [Phase 03]: Bumped Pillow pin from 11.3.0 to 12.1.1 -- Python 3.14.3 dev box has Pillow 12.1.1 installed; 11.3.0 has no cp314 wheel
 - [Phase 03]: mss 10.1.0 confirmed importable on Python 3.14.3 (pure-Python py3-none-any wheel)
 - [Phase 03]: CAPTUREBLT=0 hall-of-mirrors Path B defense set inside run() before mss.mss() construction
+- [Phase 04-controls-shape-resize/01]: controls.py is stdlib-only (dataclasses + math); constants (DRAG_BAR_HEIGHT, CONTROL_BAR_HEIGHT, ZOOM_MIN/MAX/STEP, MIN_SIZE, MAX_SIZE) are REDECLARED (not imported) from hit_test / state so tests can import controls in isolation without Windows-only side effects
+- [Phase 04-controls-shape-resize/01]: [Rule 1 bug fix] zoom_step semantics — plan prescribed snap-then-always-add which made zoom_step(2.13, +1) = 2.50 but plan's own test required == 2.25. Switched to "ceil-to-next-grid-point on +1, floor-to-prev-grid-point on -1" using math.floor/ceil. zoom_step(2.00, +1) == 2.25, zoom_step(2.13, +1) == 2.25, zoom_step(2.25, +1) == 2.50. User-visible behavior: pressing + on an off-grid value lands on the next visible 0.25 step.
+- [Phase 04-controls-shape-resize/01]: layout_controls at the 150x150 minimum returns OVERLAPPING-ADJACENT rects (zoom_in [62..106) and resize [106..150) share an edge; zoom_out [0..44) has an 18 px gap before zoom_in). CTRL-09 only requires >= 44x44 and in-bounds — enforcing disjointness at the minimum would break the normal-size layout. Phase 04-02 must accept this and NOT attempt to fix it.
+- [Phase 04-controls-shape-resize/01]: ButtonRect is a @dataclass(frozen=True) with fields (name: str, x: int, y: int, w: int, h: int). Hashable, immutable — safe for use as dict keys in Plan 04-02 observers if needed.
+- [Phase 04-controls-shape-resize/01]: Wave 0 test scaffolding — tests/test_window_phase4.py (12 skip stubs for Plan 02) and tests/test_clickthru.py (10 skip stubs for Plan 03) let Plans 02/03 begin red-to-green work by replacing skip lines one test at a time. Skip messages reference the specific plan number.
+- [Phase 04-controls-shape-resize/01]: tests/test_shapes_smoke.py extended with test_apply_shape_100_cycle_interleaved_resize_no_crash — 100 iterations of shape cycle interleaved with 5-size rotation on the Windows dev box. Pitfall F regression guard. Original 50-cycle test unchanged (backward compat).
 
 ### Pending Todos
 
@@ -115,8 +124,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-12T11:35:27.572Z
-Stopped at: Completed 03-01-PLAN.md (CaptureWorker producer thread + 14 structural tests)
+Last session: 2026-04-13T01:28:15Z
+Stopped at: Completed 04-01-PLAN.md (pure-Python controls.py + Wave 0 stubs + 100-cycle shapes smoke)
 Resume file: None
 
-Next step: `/gsd:execute-plan 02 02` (execute Plan 02-02 — wndproc.py WndProc subclass bridging hit_test strings to HT* constants)
+Next step: `/gsd:execute-plan 04 02` (execute Plan 04-02 — BubbleWindow Canvas controls wiring: grip glyph, shape button, zoom buttons + live text, resize button via manual geometry)

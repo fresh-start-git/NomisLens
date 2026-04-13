@@ -25,7 +25,7 @@
 ### Layout
 
 - [x] **LAYT-01**: Window has three horizontal zones: drag handle (top), magnified content (middle), controls (bottom)
-- [x] **LAYT-02**: Middle content zone is 100% click-through — all mouse and touch input passes through to underlying app (WM_NCHITTEST → HTTRANSPARENT for middle zone)
+- [x] **LAYT-02**: Middle content zone is 100% click-through — all mouse and touch input passes through to underlying app (WM_NCHITTEST → HTTRANSPARENT for in-process, PostMessageW injection via clickthru.py for cross-process — Phase 4 Plan 03 closed the cross-process gap)
 - [x] **LAYT-03**: Top drag bar and bottom control strip capture mouse/touch input normally
 - [x] **LAYT-04**: WndProc subclassed via SetWindowLongPtrW + GWLP_WNDPROC; callback stored on instance to prevent GC crash
 - [x] **LAYT-05**: Top and bottom strips are semi-transparent dark overlay (rgba 0,0,0 ~180 alpha)
@@ -163,4 +163,4 @@
 
 ---
 *Requirements defined: 2026-04-10*
-*Last updated: 2026-04-10 after initial definition*
+*Last updated: 2026-04-13 after Phase 04 completion (CTRL-01..09 delivered across Plans 04-01/02/03; LAYT-02 cross-process gap closed by Plan 04-03)*

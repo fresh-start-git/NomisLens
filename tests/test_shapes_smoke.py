@@ -156,3 +156,33 @@ def test_apply_shape_varies_dimensions_no_crash(tk_toplevel):
         shapes.apply_shape(hwnd, w, h, "circle")
         shapes.apply_shape(hwnd, w, h, "rounded")
         shapes.apply_shape(hwnd, w, h, "rect")
+
+
+@win_only
+def test_apply_shape_100_cycle_interleaved_resize_no_crash(tk_toplevel):
+    """Phase 4 Pitfall F regression guard — extended 100-iteration stress.
+
+    Interleaves shape cycling with 5 different (w, h) sizes to mimic the
+    real Phase 4 user flow where the user cycles the shape button WHILE
+    the resize button is dragging. If any iteration accidentally called
+    DeleteObject() on an HRGN owned by the OS, the process would
+    ACCESS_VIOLATION within a few iterations. 100 iterations is well
+    inside the slack PITFALLS.md recommends, and the 5-size rotation
+    exercises every shape helper (CreateEllipticRgn, CreateRoundRectRgn,
+    CreateRectRgn) at every window dimension."""
+    top, hwnd = tk_toplevel
+    cycle = ["circle", "rounded", "rect"]
+    sizes = [(200, 200), (300, 250), (400, 400), (250, 350), (500, 500)]
+    for i in range(100):
+        shape = cycle[i % 3]
+        w, h = sizes[i % 5]
+        shapes.apply_shape(hwnd, w, h, shape)
+    # After 100 iterations, the hwnd must still be valid.
+    u32 = ctypes.windll.user32
+    u32.GetWindowRect.argtypes = [
+        ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.RECT)
+    ]
+    u32.GetWindowRect.restype = ctypes.wintypes.BOOL
+    rect = ctypes.wintypes.RECT()
+    result = u32.GetWindowRect(hwnd, ctypes.byref(rect))
+    assert result != 0, "hwnd invalidated after 100-cycle stress (Pitfall F regression)"

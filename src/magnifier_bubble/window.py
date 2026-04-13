@@ -116,7 +116,7 @@ class BubbleWindow:
         # This eliminates ALL Tk/Tcl calls from the capture thread, removing
         # the Python 3.14 GIL/PyEval_RestoreThread crash that occurred when
         # root.after(0, ...) was called from the capture thread during any
-        # message-pump-active window (SendMessageW drag loop, WM_NCHITTEST, etc.)
+        # message-pump-active window (modal Send-Message drag loop, WM_NCHITTEST, etc.)
         self._frame_queue: queue.SimpleQueue = queue.SimpleQueue()
 
         snap = state.snapshot()
@@ -346,17 +346,17 @@ class BubbleWindow:
         if sys.platform == "win32" and self._hwnd:
             shapes.apply_shape(self._hwnd, snap.w, snap.h, snap.shape)
 
-        # --- Pattern 2b: live-feedback drag via WM_LBUTTONDOWN on top strip ---
-        # With WS_EX_NOACTIVATE set, HTCAPTION-only drag has a documented
-        # Manual geometry-based drag — avoids SendMessageW(WM_NCLBUTTONDOWN).
-        # Pattern 2b (SendMessageW → DefWindowProc modal move loop) entered a
-        # native GetMessage pump with 3× re-entrant WndProc callbacks. Inside
-        # those, Tk's WndProc released the GIL (Py_BEGIN_ALLOW_THREADS), the
-        # capture thread acquired it for mss, and PyEval_RestoreThread(NULL)
-        # crashed Python 3.14. Manual drag stays entirely in Python: press
-        # records the screen origin, B1-Motion moves the window via geometry(),
-        # release syncs AppState. No modal loop, no re-entrant WndProc, no GIL
-        # state confusion.
+        # --- Manual-geometry drag for the top strip ---
+        # WS_EX_NOACTIVATE windows cannot use the OS-managed caption-drag
+        # modal move loop (it triggers a re-entrant WndProc pump that
+        # released the GIL inside Tk's message handler and crashed
+        # Python 3.14 via PyEval_RestoreThread(NULL) — see STATE.md Phase 3
+        # decisions). Instead, press records the screen origin, B1-Motion
+        # moves the window via geometry(), release syncs AppState. Purely
+        # Python — no modal loop, no re-entrant OS pump, no GIL hazard.
+        # Phase 4 extends the same three bindings with a resize drag state
+        # machine (self._resize_origin) — see _on_canvas_press /
+        # _on_canvas_drag / _on_canvas_release below.
         self._drag_origin: tuple[int, int, int, int] | None = None
         self._canvas.bind("<Button-1>", self._on_canvas_press)
         self._canvas.bind("<B1-Motion>", self._on_canvas_drag)
@@ -438,7 +438,24 @@ class BubbleWindow:
         )
 
     def _on_canvas_drag(self, event) -> None:
-        """Move the window and update capture position on every motion tick."""
+        """Phase 4 amended: resize drag takes precedence over move drag.
+
+        The two state machines are mutually exclusive — press only sets
+        _resize_origin XOR _drag_origin, so checking resize first is safe.
+        """
+        if self._resize_origin is not None:
+            sx0, sy0, w0, h0 = self._resize_origin
+            raw_w = w0 + (event.x_root - sx0)
+            raw_h = h0 + (event.y_root - sy0)
+            new_w, new_h = resize_clamp(raw_w, raw_h)
+            # Top-left stays fixed; only the bottom-right corner moves.
+            cur_x = self.root.winfo_x()
+            cur_y = self.root.winfo_y()
+            self.root.geometry(f"{new_w}x{new_h}+{cur_x}+{cur_y}")
+            # AppState write — observer re-applies SetWindowRgn + re-layouts buttons.
+            self.state.set_size(new_w, new_h)
+            return
+        # Existing Phase 3 drag motion (unchanged)
         if self._drag_origin is None:
             return
         sx0, sy0, wx0, wy0 = self._drag_origin
@@ -450,7 +467,10 @@ class BubbleWindow:
         self.state.set_position(new_x, new_y)
 
     def _on_canvas_release(self, event) -> None:
-        """Finalise drag: sync final position and clear drag state."""
+        """Phase 4 amended: clear resize origin OR finish move drag."""
+        if self._resize_origin is not None:
+            self._resize_origin = None
+            return
         if self._drag_origin is None:
             return
         self._drag_origin = None

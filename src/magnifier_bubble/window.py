@@ -123,6 +123,10 @@ class BubbleWindow:
         self._wndproc_keepalive: wndproc.WndProcKeepalive | None = None
         self._canvas_wndproc_keepalive: wndproc.WndProcKeepalive | None = None
         self._frame_wndproc_keepalive: wndproc.WndProcKeepalive | None = None
+        # Phase 5 (PERS-04): set by app.py via attach_config_writer; used
+        # by destroy() to flush pending writes BEFORE Tk teardown so
+        # root.after_cancel still has a live root.  None until attached.
+        self._config_writer = None  # type: ignore[assignment]
         # Thread-safe frame queue: the capture thread puts PIL Images here;
         # the main thread drains it via a recurring root.after() poll.
         # This eliminates ALL Tk/Tcl calls from the capture thread, removing
@@ -399,6 +403,19 @@ class BubbleWindow:
         # Phase 3: capture worker placeholder (started by app.py via start_capture)
         self._capture_worker: CaptureWorker | None = None
 
+    # ---- Phase 5: Config writer attach point ----
+
+    def attach_config_writer(self, writer) -> None:
+        """Wire a Phase 5 ConfigWriter so destroy() can flush_pending.
+
+        Called from app.py main() AFTER the writer has registered itself
+        as an AppState.on_change observer.  Stored as a plain attribute
+        (no type import to avoid creating a window.py -> config.py import
+        edge that couples Phase 5 wiring into the Phase 2 hard dependency
+        chain).  Multiple calls silently overwrite — the last wins.
+        """
+        self._config_writer = writer
+
     # ---- Internal helpers ----
 
     def _zone_fn(self, client_x: int, client_y: int, w: int, h: int) -> str:
@@ -669,8 +686,24 @@ class BubbleWindow:
         """Called on WM_DELETE_WINDOW. Uninstall the WndProc subclass
         BEFORE destroying the root so the original proc is re-seated on
         a still-valid HWND.
+
+        Phase 5 addition (PERS-04): flush any pending ConfigWriter debounce
+        SYNCHRONOUSLY before capture/WndProc teardown, while root.after_cancel
+        still has a live Tk root.  Pitfall 7 in 05-RESEARCH.md — do NOT use
+        root.after(0, ...) here; the scheduled callback would never fire.
         """
         try:
+            # Phase 5 PERS-04: flush debounced config write SYNC, before
+            # anything else in the teardown chain.  Wrapped in its own
+            # try so a writer bug cannot block capture/WndProc teardown.
+            if self._config_writer is not None:
+                try:
+                    self._config_writer.flush_pending()
+                except Exception as exc:
+                    print(
+                        f"[config] flush_pending failed during destroy err={exc}",
+                        flush=True,
+                    )
             # Phase 3: stop the capture worker BEFORE tearing down
             # root / WndProc chain so the worker can't fire one last
             # frame onto a dead canvas.

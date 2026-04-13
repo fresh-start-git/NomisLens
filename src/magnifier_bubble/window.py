@@ -222,7 +222,7 @@ class BubbleWindow:
         content_w = snap.w
         content_h = snap.h - DRAG_STRIP_HEIGHT - CONTROL_STRIP_HEIGHT
         self._photo: ImageTk.PhotoImage = ImageTk.PhotoImage(
-            "RGB", (content_w, content_h)
+            "RGB", (content_w, content_h), master=self.root
         )
         self._photo_size: tuple[int, int] = (content_w, content_h)
         # Z-order: image item created LAST among the content-zone items
@@ -640,7 +640,7 @@ class BubbleWindow:
         the last frame (Phase 4 will drive this path via state.set_size).
         """
         if img.size != self._photo_size:
-            self._photo = ImageTk.PhotoImage("RGB", img.size)
+            self._photo = ImageTk.PhotoImage("RGB", img.size, master=self.root)
             self._photo_size = img.size
             self._canvas.itemconfig(self._image_id, image=self._photo)
         self._photo.paste(img)

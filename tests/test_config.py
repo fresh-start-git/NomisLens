@@ -360,8 +360,8 @@ def test_hotkey_roundtrip():
 def test_hotkey_defaults_on_corrupt():
     _require_parse_hotkey()
     from magnifier_bubble.config import parse_hotkey
-    from magnifier_bubble.winconst import MOD_CONTROL, VK_Z
-    default = (MOD_CONTROL, VK_Z)
+    from magnifier_bubble.winconst import MOD_ALT, MOD_CONTROL, VK_Z
+    default = (MOD_CONTROL | MOD_ALT, VK_Z)
     assert parse_hotkey(None) == default
     assert parse_hotkey("ctrl+z") == default          # string not dict
     assert parse_hotkey(42) == default                # int not dict
@@ -377,8 +377,8 @@ def test_hotkey_defaults_on_corrupt():
 def test_hotkey_rejects_unknown_modifier():
     _require_parse_hotkey()
     from magnifier_bubble.config import parse_hotkey
-    from magnifier_bubble.winconst import MOD_CONTROL, VK_Z
-    default = (MOD_CONTROL, VK_Z)
+    from magnifier_bubble.winconst import MOD_ALT, MOD_CONTROL, VK_Z
+    default = (MOD_CONTROL | MOD_ALT, VK_Z)
     assert parse_hotkey({"modifiers": ["ctrl", "fn"], "vk": "z"}) == default
     # meta not a Win32 modifier
     assert parse_hotkey({"modifiers": ["meta"], "vk": "z"}) == default

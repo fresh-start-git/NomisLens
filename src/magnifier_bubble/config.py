@@ -239,7 +239,7 @@ _MOD_MAP: dict[str, int] = {
     "win":   MOD_WIN,
 }
 
-_HOTKEY_DEFAULT: tuple[int, int] = (MOD_CONTROL, VK_Z)
+_HOTKEY_DEFAULT: tuple[int, int] = (MOD_CONTROL | MOD_ALT, VK_Z)
 
 
 def parse_hotkey(raw) -> tuple[int, int]:
@@ -248,15 +248,14 @@ def parse_hotkey(raw) -> tuple[int, int]:
     Never raises.  Unknown modifier -> default.  Non-letter/non-digit vk ->
     default.  Non-dict input -> default.  Case-insensitive modifier names.
 
-    Default: (MOD_CONTROL, VK_Z) == Ctrl+Z.  If Cornerstone's Ctrl+Z undo
-    conflicts, user edits config.json to
-    {"modifiers": ["ctrl", "alt"], "vk": "z"}.
+    Default: (MOD_CONTROL | MOD_ALT, VK_Z) == Ctrl+Alt+Z.  Avoids collision
+    with Cornerstone's Ctrl+Z undo shortcut.
     """
     if not isinstance(raw, dict):
         return _HOTKEY_DEFAULT
     mods = 0
-    mod_list = raw.get("modifiers", ["ctrl"])
-    if not isinstance(mod_list, list):
+    mod_list = raw.get("modifiers")
+    if mod_list is None or not isinstance(mod_list, list):
         return _HOTKEY_DEFAULT
     for name in mod_list:
         bit = _MOD_MAP.get(str(name).lower())
@@ -265,7 +264,10 @@ def parse_hotkey(raw) -> tuple[int, int]:
         mods |= bit
     if mods == 0:
         return _HOTKEY_DEFAULT
-    vk_raw = str(raw.get("vk", "z")).upper()
+    vk_raw = raw.get("vk")
+    if vk_raw is None:
+        return _HOTKEY_DEFAULT
+    vk_raw = str(vk_raw).upper()
     if len(vk_raw) == 1 and "A" <= vk_raw <= "Z":
         return (mods, ord(vk_raw))
     if len(vk_raw) == 1 and "0" <= vk_raw <= "9":

@@ -47,6 +47,16 @@ WINCONST_PATH = (
         ("CWP_SKIPTRANSPARENT", 0x0004),
         ("MK_LBUTTON",          0x0001),
         ("WM_LBUTTONUP",        0x0202),
+        # ---- Phase 6 additions ----
+        ("MOD_ALT",      0x0001),
+        ("MOD_CONTROL",  0x0002),
+        ("MOD_SHIFT",    0x0004),
+        ("MOD_WIN",      0x0008),
+        ("MOD_NOREPEAT", 0x4000),
+        ("VK_Z",         0x5A),
+        ("WM_HOTKEY",    0x0312),
+        ("WM_QUIT",      0x0012),
+        ("ERROR_HOTKEY_ALREADY_REGISTERED", 1409),
     ],
 )
 def test_winconst_value(name, expected):

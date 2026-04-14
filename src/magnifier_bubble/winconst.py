@@ -81,3 +81,24 @@ MK_LBUTTON = 0x0001
 # Used by clickthru.py to post UP immediately after DOWN - some targets
 # don't consume a lone DOWN.
 WM_LBUTTONUP = 0x0202
+
+# ---- Phase 6 additions ----
+
+# RegisterHotKey modifier flags (winuser.h).
+MOD_ALT      = 0x0001
+MOD_CONTROL  = 0x0002
+MOD_SHIFT    = 0x0004
+MOD_WIN      = 0x0008
+MOD_NOREPEAT = 0x4000  # Windows 7+; suppresses auto-repeat flood.
+
+# Virtual-key codes we actually care about for the default / fallback hotkey.
+# The full A-Z / 0-9 range is ASCII-uppercase (A=0x41..Z=0x5A, 0=0x30..9=0x39).
+VK_Z = 0x5A
+
+# Thread-queue message used by GetMessage to distinguish hotkey events.
+WM_HOTKEY = 0x0312
+# Posted by PostThreadMessageW to break the worker out of GetMessage.
+WM_QUIT   = 0x0012
+
+# Well-known RegisterHotKey error code - surface gracefully, don't crash.
+ERROR_HOTKEY_ALREADY_REGISTERED = 1409

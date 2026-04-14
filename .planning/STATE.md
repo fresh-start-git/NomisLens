@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: unknown
 stopped_at: "Completed 05-02-PLAN.md (config persistence integration: app.py loads config before AppState; BubbleWindow.destroy() flushes pending writes synchronously; 5/5 manual checks approved on Windows 11 dev box; PHASE 05 COMPLETE — all 4 PERS-* requirements end-to-end verified)"
-last_updated: "2026-04-13T21:09:35.837Z"
+last_updated: "2026-04-14T03:19:56.926Z"
 progress:
   total_phases: 8
   completed_phases: 4

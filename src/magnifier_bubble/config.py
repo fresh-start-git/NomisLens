@@ -221,6 +221,59 @@ def load(path: Path) -> StateSnapshot:
 
 
 # ---------------------------------------------------------------------------
+# Phase 6: Hotkey schema parser (HOTK-04).
+# Graceful — NEVER raises, always returns a (modifiers, vk) tuple.
+# Not wired into load()'s StateSnapshot contract; Plan 06-03 picks up the
+# "hotkey" field from a raw json load in app.py so Phase 5 persistence
+# tests stay unchanged.
+# ---------------------------------------------------------------------------
+
+from magnifier_bubble.winconst import (
+    MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, VK_Z,
+)
+
+_MOD_MAP: dict[str, int] = {
+    "ctrl":  MOD_CONTROL,
+    "alt":   MOD_ALT,
+    "shift": MOD_SHIFT,
+    "win":   MOD_WIN,
+}
+
+_HOTKEY_DEFAULT: tuple[int, int] = (MOD_CONTROL, VK_Z)
+
+
+def parse_hotkey(raw) -> tuple[int, int]:
+    """Parse a hotkey config dict -> (modifiers_bitmask, vk_code).
+
+    Never raises.  Unknown modifier -> default.  Non-letter/non-digit vk ->
+    default.  Non-dict input -> default.  Case-insensitive modifier names.
+
+    Default: (MOD_CONTROL, VK_Z) == Ctrl+Z.  If Cornerstone's Ctrl+Z undo
+    conflicts, user edits config.json to
+    {"modifiers": ["ctrl", "alt"], "vk": "z"}.
+    """
+    if not isinstance(raw, dict):
+        return _HOTKEY_DEFAULT
+    mods = 0
+    mod_list = raw.get("modifiers", ["ctrl"])
+    if not isinstance(mod_list, list):
+        return _HOTKEY_DEFAULT
+    for name in mod_list:
+        bit = _MOD_MAP.get(str(name).lower())
+        if bit is None:
+            return _HOTKEY_DEFAULT
+        mods |= bit
+    if mods == 0:
+        return _HOTKEY_DEFAULT
+    vk_raw = str(raw.get("vk", "z")).upper()
+    if len(vk_raw) == 1 and "A" <= vk_raw <= "Z":
+        return (mods, ord(vk_raw))
+    if len(vk_raw) == 1 and "0" <= vk_raw <= "9":
+        return (mods, ord(vk_raw))
+    return _HOTKEY_DEFAULT
+
+
+# ---------------------------------------------------------------------------
 # Debounced observer — Pattern 3.
 # ---------------------------------------------------------------------------
 

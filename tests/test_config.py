@@ -336,14 +336,52 @@ def _require_parse_hotkey():
 
 def test_hotkey_roundtrip():
     _require_parse_hotkey()
-    pytest.skip("stub pending Plan 06-02 implementation")
+    from magnifier_bubble.config import parse_hotkey
+    from magnifier_bubble.winconst import (
+        MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, VK_Z,
+    )
+
+    assert parse_hotkey({"modifiers": ["ctrl"], "vk": "z"}) == (MOD_CONTROL, VK_Z)
+    assert parse_hotkey({"modifiers": ["ctrl", "alt"], "vk": "z"}) == (
+        MOD_CONTROL | MOD_ALT, VK_Z,
+    )
+    assert parse_hotkey({"modifiers": ["shift", "win"], "vk": "a"}) == (
+        MOD_SHIFT | MOD_WIN, ord("A"),
+    )
+    # Case-insensitive
+    assert parse_hotkey({"modifiers": ["CTRL"], "vk": "Z"}) == (MOD_CONTROL, VK_Z)
+    assert parse_hotkey({"modifiers": ["Ctrl", "Alt"], "vk": "z"}) == (
+        MOD_CONTROL | MOD_ALT, VK_Z,
+    )
+    # Digit VK
+    assert parse_hotkey({"modifiers": ["ctrl"], "vk": "5"}) == (MOD_CONTROL, ord("5"))
 
 
 def test_hotkey_defaults_on_corrupt():
     _require_parse_hotkey()
-    pytest.skip("stub pending Plan 06-02 implementation")
+    from magnifier_bubble.config import parse_hotkey
+    from magnifier_bubble.winconst import MOD_CONTROL, VK_Z
+    default = (MOD_CONTROL, VK_Z)
+    assert parse_hotkey(None) == default
+    assert parse_hotkey("ctrl+z") == default          # string not dict
+    assert parse_hotkey(42) == default                # int not dict
+    assert parse_hotkey([]) == default                # list not dict
+    assert parse_hotkey({}) == default                # empty -> defaults ctrl + z
+    assert parse_hotkey({"modifiers": "ctrl"}) == default  # modifiers not list
+    assert parse_hotkey({"modifiers": ["ctrl"], "vk": "zz"}) == default  # 2-char vk
+    assert parse_hotkey({"modifiers": ["ctrl"], "vk": "!"}) == default   # symbol vk
+    # Empty mods -> 0 bitmask -> default
+    assert parse_hotkey({"modifiers": [], "vk": "z"}) == default
 
 
 def test_hotkey_rejects_unknown_modifier():
     _require_parse_hotkey()
-    pytest.skip("stub pending Plan 06-02 implementation")
+    from magnifier_bubble.config import parse_hotkey
+    from magnifier_bubble.winconst import MOD_CONTROL, VK_Z
+    default = (MOD_CONTROL, VK_Z)
+    assert parse_hotkey({"modifiers": ["ctrl", "fn"], "vk": "z"}) == default
+    # meta not a Win32 modifier
+    assert parse_hotkey({"modifiers": ["meta"], "vk": "z"}) == default
+    # Empty string mod
+    assert parse_hotkey({"modifiers": ["ctrl", ""], "vk": "z"}) == default
+    assert parse_hotkey({"modifiers": ["hyper"], "vk": "z"}) == default

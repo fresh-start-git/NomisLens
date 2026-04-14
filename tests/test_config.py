@@ -319,3 +319,31 @@ def test_config_does_not_call_state_set():
 def test_config_no_os_access_w_ok():
     src = _config_src()
     assert "os.access" not in src
+
+
+# ---------------------------------------------------------------------
+# Phase 6 Wave 0 stubs — hotkey parser (HOTK-04)
+# Each stub is filled in by Plan 06-02 when parse_hotkey lands.
+# ---------------------------------------------------------------------
+
+
+def _require_parse_hotkey():
+    try:
+        from magnifier_bubble.config import parse_hotkey  # noqa: F401
+    except ImportError:
+        pytest.skip("config.parse_hotkey not yet implemented (pending Plan 06-02)")
+
+
+def test_hotkey_roundtrip():
+    _require_parse_hotkey()
+    pytest.skip("stub pending Plan 06-02 implementation")
+
+
+def test_hotkey_defaults_on_corrupt():
+    _require_parse_hotkey()
+    pytest.skip("stub pending Plan 06-02 implementation")
+
+
+def test_hotkey_rejects_unknown_modifier():
+    _require_parse_hotkey()
+    pytest.skip("stub pending Plan 06-02 implementation")

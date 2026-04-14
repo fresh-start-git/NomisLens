@@ -559,3 +559,28 @@ def test_content_zone_click_does_nothing_when_injection_disabled(phase4_bubble, 
         f"inject_click must NOT be called when injection is disabled; "
         f"got {calls}"
     )
+
+
+# ---------------------------------------------------------------------
+# Phase 6 Wave 0 stub — visibility wrappers (HOTK-03)
+# Plan 06-03 adds BubbleWindow.show() / hide() / toggle() + fills in this test.
+# ---------------------------------------------------------------------
+
+
+def _require_bubble_toggle():
+    """Skip if Plan 06-03 hasn't added show/hide/toggle yet."""
+    try:
+        from magnifier_bubble.window import BubbleWindow
+    except ImportError:
+        pytest.skip("BubbleWindow import failed")
+    if not all(hasattr(BubbleWindow, name) for name in ("show", "hide", "toggle")):
+        pytest.skip(
+            "BubbleWindow.show/hide/toggle not yet implemented "
+            "(pending Plan 06-03)"
+        )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
+def test_bubble_show_hide_toggle(tk_toplevel):
+    _require_bubble_toggle()
+    pytest.skip("stub pending Plan 06-03 implementation")

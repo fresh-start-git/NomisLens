@@ -3,13 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Completed 05-02-PLAN.md (config persistence integration: app.py loads config before AppState; BubbleWindow.destroy() flushes pending writes synchronously; 5/5 manual checks approved on Windows 11 dev box; PHASE 05 COMPLETE — all 4 PERS-* requirements end-to-end verified)"
-last_updated: "2026-04-14T03:19:56.926Z"
+stopped_at: "Completed 06-01-PLAN.md (Wave 0 test scaffolding for Phase 6 global hotkey: 9 winconst constants + 5 pure-Python structural lint stubs in test_hotkey.py + 3 Windows-only integration stubs in test_hotkey_smoke.py + 3 HOTK-04 parser stubs in test_config.py + 1 HOTK-03 visibility-wrapper stub in test_window_phase4.py; all 35 winconst tests pass, all 8+4 stubs skip cleanly, zero plan deviations)"
+last_updated: "2026-04-14T04:04:27.551Z"
 progress:
   total_phases: 8
   completed_phases: 4
-  total_plans: 13
-  completed_plans: 12
+  total_plans: 17
+  completed_plans: 13
+  percent: 76
 ---
 
 # Project State
@@ -19,20 +20,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Clicks and touches pass through the magnified content area to whatever app is underneath — the bubble enhances vision without blocking the workflow.
-**Current focus:** Phase 05 COMPLETE — ready to start Phase 06 (global-hotkey) or Phase 03-02 (capture loop completion)
+**Current focus:** Phase 06 — global-hotkey
 
 ## Current Position
 
-Phase: 05 (config-persistence) — COMPLETE
-Plan: 2 of 2 (DONE)
+Phase: 06 (global-hotkey) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: ~12 min
-- Total execution time: ~2.7 hours
+- Total execution time: ~2.8 hours
 
 **By Phase:**
 
@@ -43,11 +44,12 @@ Plan: 2 of 2 (DONE)
 | 03-capture-loop | 1 | 8 min | 8 min |
 | 04-controls-shape-resize | 3 | 75 min | 25 min |
 | 05-config-persistence | 2 | 29 min | 14.5 min |
+| 06-global-hotkey | 1 | 5 min | 5 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 04-02 (40 min), 04-03 (28 min), 05-01 (8 min), 05-02 (~21 min)
-- Trend: PHASE 05 COMPLETE. Plan 05-02 wired the Plan 05-01 config core into app startup (load before AppState construction) and BubbleWindow shutdown (flush_pending before Tk teardown). 2 implementation tasks delivered exactly per plan — zero deviations. AST source-scan lint added to test_main_entry.py guards call ordering; 4 destroy-flush contract tests in new tests/test_window_config_integration.py prove the PERS-04 invariant. 5/5 manual checks approved on Windows 11 dev box (happy-path round-trip, burst-debounce, flush-on-shutdown mid-debounce kill, %LOCALAPPDATA% fallback under repo-dir ACL lockdown, corrupt-config graceful degradation). All 4 PERS-* requirements end-to-end verified. Two UX gaps surfaced during verification (no on-bubble close button; click-through not working in real use) — both deferred and tracked in 05-02-SUMMARY.md "Issues Observed" section for follow-up phases (likely Phase 7 tray + a Phase 04-04 click-through diagnostic plan).
+- Last 5 plans: 04-03 (28 min), 05-01 (8 min), 05-02 (~21 min), 06-01 (5 min)
+- Trend: Phase 6 scaffolding plan 06-01 landed exactly as written — zero deviations, 4 tasks in ~5 minutes. Wave 0 stub pattern (3rd occurrence; Phase 04-01 + Phase 05-01 were the prior two) created 9 Win32 constants + 12 skip stubs so Plans 06-02 / 06-03 can start red-to-green immediately. Pre-existing capture/window-integration failures (6 failed + 4 errors with `TypeError: 'Event' object not callable`) documented in .planning/phases/06-global-hotkey/deferred-items.md and confirmed identical on pre-change master baseline — out of Plan 06-01 scope, flagged for a Phase 04-04 diagnostic plan per existing STATE.md Pending Todos. Full winconst suite: 35 pass; full hotkey stub suite: 8 skipped; full config+window_phase4 suite: 45 pass / 4 skipped.
 
 *Updated after each plan completion*
 
@@ -67,6 +69,7 @@ Plan: 2 of 2 (DONE)
 | Phase 04-controls-shape-resize P03 | 28 min | 3 tasks (2 automated + 1 auto-approved human-verify) | 8 files |
 | Phase 05 P01 | 8 min | 3 tasks | 4 files |
 | Phase 05 P02 | ~21 min | 3 tasks (2 implementation + 1 human-verify, all 5/5 checks approved) | 4 files |
+| Phase 06 P01 | 5 min | 4 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -141,6 +144,8 @@ Recent decisions affecting current work:
 - [Phase 05]: [Phase 05-config-persistence/02]: Promoted lazy `import sys as _sys` to top-of-file `import sys` in app.py — sys now used twice (platform check for start_capture + ULTIMATE_ZOOM_SMOKE env-var gate), so lazy form added cost without benefit. Dropped StateSnapshot import (AppState is always seeded from load() result; defaults are dead code at main scope).
 - [Phase 05]: [Phase 05-config-persistence/02]: Two UX gaps surfaced during human verification — (a) no on-bubble close button (user had to terminate process to close); (b) click-through not actually working in real use despite Phase 4-03 inject_click implementation. Both deferred — tracked in 05-02-SUMMARY.md "Issues Observed". Suggested follow-ups: Phase 7 tray adds Exit menu + a small fix-up to add close glyph; a Phase 04-04 plan to diagnose click-through (Spy++ on canvas WM_LBUTTONDOWN, verify inject_click is invoked, fix routing or fall back).
 - [Phase 05]: PHASE 05 COMPLETE — All 4 PERS-* requirements end-to-end verified on real Windows 11 hardware. Persistence layer production-ready. Phase 6 (Global Hotkey) and Phase 7 (System Tray) both ready to start.
+- [Phase 06]: [Phase 06-global-hotkey/01]: Wave 0 test scaffolding — 9 winconst constants (MOD_* / VK_Z / WM_HOTKEY / WM_QUIT / ERROR_HOTKEY_ALREADY_REGISTERED) + 12 skip stubs across 4 test files let Plans 06-02 and 06-03 begin red-to-green work by replacing skip lines one test at a time.
+- [Phase 06]: [Phase 06-global-hotkey/01]: Wave 0 stub pattern (3rd occurrence after Phase 04-01 + Phase 05-01) uses pathlib.exists() probe BEFORE try/except import — lets Linux CI skip cleanly without triggering ctypes import errors on Windows-only modules.
 
 ### Pending Todos
 
@@ -160,8 +165,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T20:51:13Z
-Stopped at: Completed 05-02-PLAN.md (config persistence integration: app.py loads config before AppState; BubbleWindow.destroy() flushes pending writes synchronously; 5/5 manual checks approved on Windows 11 dev box; PHASE 05 COMPLETE — all 4 PERS-* requirements end-to-end verified)
+Last session: 2026-04-14T04:04:27.546Z
+Stopped at: Completed 06-01-PLAN.md (Wave 0 test scaffolding for Phase 6 global hotkey: 9 winconst constants + 5 pure-Python structural lint stubs in test_hotkey.py + 3 Windows-only integration stubs in test_hotkey_smoke.py + 3 HOTK-04 parser stubs in test_config.py + 1 HOTK-03 visibility-wrapper stub in test_window_phase4.py; all 35 winconst tests pass, all 8+4 stubs skip cleanly, zero plan deviations)
 Resume file: None
 
-Next step: `/gsd:execute-phase 06` (Phase 06 global-hotkey — Ctrl+Alt+Z show/hide via ctypes.user32.RegisterHotKey + daemon message-pump thread; covers HOTK-01..05) OR `/gsd:execute-phase 03` (finish Phase 03 capture loop — only 03-02 BubbleWindow capture wiring + 7-point manual checkpoint remaining; covers CAPT-01, CAPT-05, CAPT-06). Both are independent of each other. ALSO: two UX gaps surfaced during Phase 05 verification need follow-up plans before clinic deploy — (a) no on-bubble close button (Phase 7 tray work or small fix-up plan), (b) click-through not actually working in real use despite Phase 04-03 inject_click (proposed Phase 04-04 diagnostic plan: Spy++ canvas WM_LBUTTONDOWN, verify inject_click fires, fix routing). See 05-02-SUMMARY.md "Issues Observed" section for details.
+Next step: `/gsd:execute-plan 06-02` (Plan 06-02: implement `src/magnifier_bubble/hotkey.py` + extend `config.parse_hotkey` — this auto-unskips the 5 test_hotkey.py stubs, 3 test_hotkey_smoke.py stubs, and 3 test_config.py parser stubs created by Plan 06-01). Then `/gsd:execute-plan 06-03` wires the hotkey pump into BubbleWindow with `show/hide/toggle` (auto-unskips test_bubble_show_hide_toggle). Plans 06-04 handles the manual verification checkpoint. ALSO STILL OPEN: two UX gaps from Phase 05 verification — (a) no on-bubble close button (Phase 7 tray or small fix-up plan); (b) click-through not actually working in real use despite Phase 04-03 inject_click (proposed Phase 04-04 diagnostic plan). Pre-existing test failures in test_capture_smoke.py + test_window_integration.py + test_window_config_integration.py (TypeError 'Event' object not callable, 6 failed + 4 errors) tracked in .planning/phases/06-global-hotkey/deferred-items.md — also a Phase 04-04 candidate.

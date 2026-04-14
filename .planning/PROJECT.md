@@ -35,7 +35,7 @@ Clicks and touches pass through the magnified content area to whatever app is un
 - [ ] Semi-transparent dark strips for top/bottom controls
 - [ ] Ctrl+Z global hotkey toggles bubble visible/hidden (works even when Cornerstone has focus)
 - [ ] System tray icon with Show/Hide, Always on Top toggle, Exit
-- [ ] Persist config (position, size, zoom, shape) to config.json on every change; restore on launch
+- [x] Persist config (position, size, zoom, shape) to config.json on every change; restore on launch — *Validated in Phase 5: Config Persistence*
 - [ ] requirements.txt with pinned versions
 - [ ] PyInstaller build.bat → single .exe, no Python install required on clinic PC
 - [ ] README.md with plain-English setup for non-technical users
@@ -75,4 +75,4 @@ Clicks and touches pass through the magnified content area to whatever app is un
 | config.json in app directory | Predictable location, easy for non-technical staff to find/reset | — Pending |
 
 ---
-*Last updated: 2026-04-11 — Phase 1 (Foundation + DPI) complete*
+*Last updated: 2026-04-14 — Phase 5 (Config Persistence) complete*

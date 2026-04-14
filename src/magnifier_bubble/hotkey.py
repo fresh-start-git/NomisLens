@@ -64,6 +64,15 @@ _HOTKEY_ID = 0x0001
 
 _SIGNATURES_APPLIED: bool = False
 
+# ctypes.windll.user32 loads user32 WITHOUT use_last_error=True, which means
+# ctypes.get_last_error() returns 0 regardless of the real GetLastError.
+# We want the real value on RegisterHotKey failure so the graceful-failure
+# path can fire with the ERROR_HOTKEY_ALREADY_REGISTERED code.  Loading
+# user32 via WinDLL(..., use_last_error=True) enables ctypes' own
+# save/restore of GetLastError across calls -- required because other
+# Python code can clobber the TLS slot before we read it.
+_U32_ERR: ctypes.WinDLL | None = None  # type: ignore[attr-defined]
+
 
 def _apply_signatures(user32) -> None:
     """Apply argtypes/restype to every user32 function this module calls.
@@ -202,7 +211,18 @@ class HotkeyManager:
         # _run is the thread entry point, NOT a WINFUNCTYPE callback re-entered
         # by the OS dispatcher. The GIL-holding variant is required only on
         # hot-path WndProc callbacks where Tk timer dispatch might interleave.
-        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        #
+        # We route Win32 calls through a use_last_error=True handle so that
+        # ctypes.get_last_error() actually returns the real GetLastError
+        # after RegisterHotKey fails (Pitfall 8 surfacing requires the
+        # ERROR_HOTKEY_ALREADY_REGISTERED value; the default ctypes.windll
+        # loader does NOT save it).
+        global _U32_ERR
+        if _U32_ERR is None:
+            _U32_ERR = ctypes.WinDLL(  # type: ignore[attr-defined]
+                "user32", use_last_error=True,
+            )
+        user32 = _U32_ERR
         kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
         _apply_signatures(user32)
         self._tid = kernel32.GetCurrentThreadId()

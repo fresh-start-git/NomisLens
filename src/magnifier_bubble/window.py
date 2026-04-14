@@ -127,6 +127,12 @@ class BubbleWindow:
         # by destroy() to flush pending writes BEFORE Tk teardown so
         # root.after_cancel still has a live root.  None until attached.
         self._config_writer = None  # type: ignore[assignment]
+        # Phase 6 (HOTK-05): set by app.py via attach_hotkey_manager; used
+        # by destroy() to stop the worker thread BEFORE capture_worker.stop()
+        # so a late WM_HOTKEY can't schedule root.after on a tearing-down root.
+        # None until attached.  attach_hotkey_manager is a no-op-safe symmetric
+        # helper so tests and --no-hotkey paths can skip wiring without branching.
+        self._hotkey_manager = None  # type: ignore[assignment]
         # Thread-safe frame queue: the capture thread puts PIL Images here;
         # the main thread drains it via a recurring root.after() poll.
         # This eliminates ALL Tk/Tcl calls from the capture thread, removing
@@ -416,6 +422,41 @@ class BubbleWindow:
         """
         self._config_writer = writer
 
+    # ---- Phase 6: Hotkey manager attach point ----
+
+    def attach_hotkey_manager(self, manager) -> None:
+        """Wire a Phase 6 HotkeyManager so destroy() can stop it cleanly.
+
+        Called from app.py main() AFTER manager.start() succeeded.  Stored
+        as a plain attribute (duck-typed; no type import to avoid creating
+        a window.py -> hotkey.py import edge — same discipline as
+        attach_config_writer).  Multiple calls silently overwrite.
+        """
+        self._hotkey_manager = manager
+
+    # ---- Phase 6 (HOTK-03): visibility wrappers ----
+    # Called from the Tk main thread — either directly by user actions
+    # or scheduled via root.after(0, ...) from the hotkey worker thread.
+    # state.set_visible(...) triggers the AppState observer; the observer
+    # does NOT re-enter these methods (Pitfall 8 in config.py).
+
+    def show(self) -> None:
+        """Reveal the bubble and mark state visible."""
+        self.root.deiconify()
+        self.state.set_visible(True)
+
+    def hide(self) -> None:
+        """Hide the bubble (preserve HWND + capture worker) and mark invisible."""
+        self.root.withdraw()
+        self.state.set_visible(False)
+
+    def toggle(self) -> None:
+        """Flip visibility; called from hotkey worker via root.after(0, ...)."""
+        if self.state.snapshot().visible:
+            self.hide()
+        else:
+            self.show()
+
     # ---- Internal helpers ----
 
     def _zone_fn(self, client_x: int, client_y: int, w: int, h: int) -> str:
@@ -704,6 +745,21 @@ class BubbleWindow:
                         f"[config] flush_pending failed during destroy err={exc}",
                         flush=True,
                     )
+            # Phase 6 (HOTK-05): stop the hotkey worker BEFORE the capture
+            # worker.  PostThreadMessageW(WM_QUIT) is fire-and-forget from
+            # this thread; the worker's GetMessageW loop breaks and the
+            # finally block calls UnregisterHotKey on the worker thread
+            # (the only thread allowed to do so, per Pitfall 1).  Wrapped
+            # in try so a stop() bug cannot block capture/WndProc teardown.
+            if self._hotkey_manager is not None:
+                try:
+                    self._hotkey_manager.stop()
+                except Exception as exc:
+                    print(
+                        f"[hotkey] stop failed during destroy err={exc}",
+                        flush=True,
+                    )
+                self._hotkey_manager = None
             # Phase 3: stop the capture worker BEFORE tearing down
             # root / WndProc chain so the worker can't fire one last
             # frame onto a dead canvas.

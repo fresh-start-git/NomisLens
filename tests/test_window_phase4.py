@@ -581,6 +581,49 @@ def _require_bubble_toggle():
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
-def test_bubble_show_hide_toggle(tk_toplevel):
+def test_bubble_show_hide_toggle(phase4_bubble):
+    """HOTK-03: BubbleWindow show/hide/toggle wrappers update state AND
+    call the underlying Tk visibility primitives.
+
+    Uses the module-scoped phase4_bubble fixture (same pattern as the
+    other Windows-only tests here) rather than building a fresh Tk().
+    Python 3.14 + tk 8.6 cannot tolerate multiple tk.Tk() in the same
+    process (STATE.md Phase 02/02 decisions).
+    """
     _require_bubble_toggle()
-    pytest.skip("stub pending Plan 06-03 implementation")
+    bubble, state = phase4_bubble
+
+    # Put the bubble into a known-visible baseline regardless of what
+    # previous tests in this module did.
+    state.set_visible(True)
+    bubble.root.deiconify()
+    bubble.root.update_idletasks()
+    assert state.snapshot().visible is True
+
+    try:
+        bubble.hide()
+        bubble.root.update_idletasks()
+        assert state.snapshot().visible is False, (
+            "hide() must set state.visible to False"
+        )
+
+        bubble.show()
+        bubble.root.update_idletasks()
+        assert state.snapshot().visible is True, (
+            "show() must set state.visible back to True"
+        )
+
+        # First toggle: True -> False
+        bubble.toggle()
+        bubble.root.update_idletasks()
+        assert state.snapshot().visible is False
+
+        # Second toggle: False -> True (returns to original)
+        bubble.toggle()
+        bubble.root.update_idletasks()
+        assert state.snapshot().visible is True
+    finally:
+        # Restore the shared fixture to a visible state for any
+        # downstream test in this module.
+        state.set_visible(True)
+        bubble.root.deiconify()

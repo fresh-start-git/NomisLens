@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Overlay Window** - Shaped, draggable, click-through, non-focus-stealing empty bubble on screen (completed 2026-04-12)
 - [ ] **Phase 3: Capture Loop** - Live magnified pixels rendered inside the bubble at 30 fps with no memory leak
 - [x] **Phase 4: Controls, Shape, Resize** - Zoom buttons, shape cycling, resize grip, touch-sized hit targets (completed 2026-04-13)
-- [ ] **Phase 5: Config Persistence** - Position, size, zoom, shape saved to config.json and restored on launch
+- [x] **Phase 5: Config Persistence** - Position, size, zoom, shape saved to config.json and restored on launch (completed 2026-04-13)
 - [ ] **Phase 6: Global Hotkey** - Ctrl+Z (configurable) toggles bubble visibility even when Cornerstone has focus
 - [ ] **Phase 7: System Tray** - Tray icon with Show/Hide, Always-on-Top toggle, and Exit
 - [ ] **Phase 8: Build and Package** - Single portable .exe via PyInstaller, README, pushed to GitHub
@@ -93,9 +93,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Rapid consecutive changes (e.g., mashing the + button 10 times in 2 seconds) produce a single debounced write ~500 ms after the last change, not 10 writes
   4. Killing the app mid-change (closing via WM_DELETE_WINDOW) flushes any pending debounced write before exit, and no partially written config.json is observable
   5. Writes use `os.replace()` atomically — pulling the plug or corrupting a write never leaves a broken config.json
-**Plans**: 2 plans (1/2 complete)
+**Plans**: 2 plans (2/2 complete)
 - [x] 05-01-PLAN.md — Pure-Python config.py module (config_path + write_atomic + load + ConfigWriter) + tests/test_config.py + Windows-only tests/test_config_smoke.py (covers PERS-01, PERS-02, PERS-03, PERS-04 in isolation) (completed 2026-04-13, see 05-01-SUMMARY.md)
-- [ ] 05-02-PLAN.md — Wire config into app.py main() (load before AppState, construct ConfigWriter after BubbleWindow) + BubbleWindow.attach_config_writer + destroy() flush_pending hook + AST lint in tests/test_main_entry.py + 5-step human verification on Windows dev box (closes PERS-03 restore-on-launch and PERS-04 flush-on-shutdown end-to-end)
+- [x] 05-02-PLAN.md — Wire config into app.py main() (load before AppState, construct ConfigWriter after BubbleWindow) + BubbleWindow.attach_config_writer + destroy() flush_pending hook + AST lint in tests/test_main_entry.py + 5-step human verification on Windows dev box (closes PERS-03 restore-on-launch and PERS-04 flush-on-shutdown end-to-end) (completed 2026-04-13, see 05-02-SUMMARY.md)
 
 ### Phase 6: Global Hotkey
 **Goal**: Let the user toggle the bubble visible/hidden with Ctrl+Z (or a configured alternative) from inside Cornerstone without the magnifier ever stealing focus or needing admin rights.
@@ -144,7 +144,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Overlay Window | 3/3 | Complete   | 2026-04-12 |
 | 3. Capture Loop | 1/2 | In progress | - |
 | 4. Controls, Shape, Resize | 3/3 | Complete | 2026-04-13 |
-| 5. Config Persistence | 1/2 | In progress | - |
+| 5. Config Persistence | 2/2 | Complete | 2026-04-13 |
 | 6. Global Hotkey | 0/TBD | Not started | - |
 | 7. System Tray | 0/TBD | Not started | - |
 | 8. Build and Package | 0/TBD | Not started | - |

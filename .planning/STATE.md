@@ -3,14 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Completed 05-01-PLAN.md (config persistence core module: config_path + write_atomic + load + ConfigWriter with 500ms debounce; 28 unit + 6 smoke tests green)"
-last_updated: "2026-04-13T20:28:10.477Z"
+stopped_at: "Completed 05-02-PLAN.md (config persistence integration: app.py loads config before AppState; BubbleWindow.destroy() flushes pending writes synchronously; 5/5 manual checks approved on Windows 11 dev box; PHASE 05 COMPLETE — all 4 PERS-* requirements end-to-end verified)"
+last_updated: "2026-04-13T21:09:35.837Z"
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 13
-  completed_plans: 11
-  percent: 85
+  completed_plans: 12
 ---
 
 # Project State
@@ -20,20 +19,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Clicks and touches pass through the magnified content area to whatever app is underneath — the bubble enhances vision without blocking the workflow.
-**Current focus:** Phase 05 — config-persistence
+**Current focus:** Phase 05 COMPLETE — ready to start Phase 06 (global-hotkey) or Phase 03-02 (capture loop completion)
 
 ## Current Position
 
-Phase: 05 (config-persistence) — EXECUTING
-Plan: 2 of 2
+Phase: 05 (config-persistence) — COMPLETE
+Plan: 2 of 2 (DONE)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 11
+- Total plans completed: 12
 - Average duration: ~12 min
-- Total execution time: ~2.4 hours
+- Total execution time: ~2.7 hours
 
 **By Phase:**
 
@@ -43,12 +42,12 @@ Plan: 2 of 2
 | 02-overlay-window | 3 | 78 min | 26 min |
 | 03-capture-loop | 1 | 8 min | 8 min |
 | 04-controls-shape-resize | 3 | 75 min | 25 min |
-| 05-config-persistence | 1 | 8 min | 8 min |
+| 05-config-persistence | 2 | 29 min | 14.5 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 04-01 (7 min), 04-02 (40 min), 04-03 (28 min), 05-01 (8 min)
-- Trend: Phase 05 started — Plan 05-01 delivered the pure-Python config core (config_path + write_atomic + load + ConfigWriter) with 28 unit tests + 6 Windows-only Tk smoke tests green, stdlib-only, importable on non-Windows CI. 3 tasks (TDD for 1+2), 1 auto-fixed deviation (module-docstring-tripped-own-lint, third repo occurrence of this pattern). No auth gates. Plan 05-02 will wire config_path + ConfigWriter into app.py.main() and BubbleWindow.destroy().
+- Last 5 plans: 04-02 (40 min), 04-03 (28 min), 05-01 (8 min), 05-02 (~21 min)
+- Trend: PHASE 05 COMPLETE. Plan 05-02 wired the Plan 05-01 config core into app startup (load before AppState construction) and BubbleWindow shutdown (flush_pending before Tk teardown). 2 implementation tasks delivered exactly per plan — zero deviations. AST source-scan lint added to test_main_entry.py guards call ordering; 4 destroy-flush contract tests in new tests/test_window_config_integration.py prove the PERS-04 invariant. 5/5 manual checks approved on Windows 11 dev box (happy-path round-trip, burst-debounce, flush-on-shutdown mid-debounce kill, %LOCALAPPDATA% fallback under repo-dir ACL lockdown, corrupt-config graceful degradation). All 4 PERS-* requirements end-to-end verified. Two UX gaps surfaced during verification (no on-bubble close button; click-through not working in real use) — both deferred and tracked in 05-02-SUMMARY.md "Issues Observed" section for follow-up phases (likely Phase 7 tray + a Phase 04-04 click-through diagnostic plan).
 
 *Updated after each plan completion*
 
@@ -67,6 +66,7 @@ Plan: 2 of 2
 | Phase 04-controls-shape-resize P02 | 40 min | 3 tasks (TDD for 1+2, human-verify for 3) | 4 files |
 | Phase 04-controls-shape-resize P03 | 28 min | 3 tasks (2 automated + 1 auto-approved human-verify) | 8 files |
 | Phase 05 P01 | 8 min | 3 tasks | 4 files |
+| Phase 05 P02 | ~21 min | 3 tasks (2 implementation + 1 human-verify, all 5/5 checks approved) | 4 files |
 
 ## Accumulated Context
 
@@ -133,10 +133,19 @@ Recent decisions affecting current work:
 - [Phase 05]: [Phase 05-config-persistence/01]: [Rule 1 bug fix] config.py module docstring rewritten to describe banned APIs (threading.Timer, os.access, state.set_*) without naming them literally — same class of bug previously fixed in Phase 2-02 wndproc.py (LOWORD/HIWORD) and Phase 4-03 clickthru.py (SendMessageW/PyDLL). Third occurrence — consider adding planner guidance to avoid the footgun.
 - [Phase 05]: [Phase 05-config-persistence/01]: ConfigWriter instance attrs locked for Plan 05-02: _after_id: Optional[str], _last_written: Optional[StateSnapshot]. Plan 05-02 integration tests may read these directly; no public accessor methods required.
 - [Phase 05]: [Phase 05-config-persistence/01]: test_config_smoke.py debounce pump ceiling bumped to 1.5s (plan specified 0.8s) to absorb scheduler jitter on CI. 500ms debounce target dominates median; zero flakes observed.
+- [Phase 05]: [Phase 05-config-persistence/02]: ConfigWriter constructed AFTER BubbleWindow (not before) so bubble.root is a live Tk instance when root.after(500, ...) schedules — Pitfall 7 defense. Construction order: argparse → dpi.debug_print → config.config_path → config.load → AppState(snap) → BubbleWindow → ConfigWriter(state, bubble.root, path) → writer.register() → bubble.attach_config_writer(writer) → bubble.start_capture (Win-only) → mainloop. Phases 6/7 will splice between attach_config_writer and start_capture.
+- [Phase 05]: [Phase 05-config-persistence/02]: BubbleWindow.attach_config_writer is duck-typed — no `from magnifier_bubble import config` in window.py. Writer is stored as plain attribute, only flush_pending() is called. Keeps Phase 5 wiring optional and window.py importable in isolation. Same import-edge discipline as Phase 4 deferred clickthru import.
+- [Phase 05]: [Phase 05-config-persistence/02]: BubbleWindow.__init__ initializes self._config_writer = None so destroy() works on bubbles built without a writer (backward compat for all Phase 2/3/4 tests). Verified: full suite green after change.
+- [Phase 05]: [Phase 05-config-persistence/02]: destroy() flush_pending() runs at TOP of try-block — BEFORE _capture_worker.stop() and BEFORE wndproc.uninstall(). Pitfall 7 ordering: ConfigWriter.flush_pending uses root.after_cancel which requires a live root. Reordering would silently drop the final write. Wrapped in try/except so a writer bug logs '[config] flush_pending failed' but never blocks teardown.
+- [Phase 05]: [Phase 05-config-persistence/02]: AST source-scan lint pattern established (test_app_loads_config_before_state) — uses inspect.getsource → ast.parse → ast.walk → collect Call nodes by func.attr/func.id → assert min(load_lines) < min(appstate_lines). Extensible to any "A must precede B in main()" contract; Phase 6 hotkey can use the same pattern for "register_hotkey before mainloop".
+- [Phase 05]: [Phase 05-config-persistence/02]: Promoted lazy `import sys as _sys` to top-of-file `import sys` in app.py — sys now used twice (platform check for start_capture + ULTIMATE_ZOOM_SMOKE env-var gate), so lazy form added cost without benefit. Dropped StateSnapshot import (AppState is always seeded from load() result; defaults are dead code at main scope).
+- [Phase 05]: [Phase 05-config-persistence/02]: Two UX gaps surfaced during human verification — (a) no on-bubble close button (user had to terminate process to close); (b) click-through not actually working in real use despite Phase 4-03 inject_click implementation. Both deferred — tracked in 05-02-SUMMARY.md "Issues Observed". Suggested follow-ups: Phase 7 tray adds Exit menu + a small fix-up to add close glyph; a Phase 04-04 plan to diagnose click-through (Spy++ on canvas WM_LBUTTONDOWN, verify inject_click is invoked, fix routing or fall back).
+- [Phase 05]: PHASE 05 COMPLETE — All 4 PERS-* requirements end-to-end verified on real Windows 11 hardware. Persistence layer production-ready. Phase 6 (Global Hotkey) and Phase 7 (System Tray) both ready to start.
 
 ### Pending Todos
 
-None yet.
+- **Phase 04-04 (proposed)**: Diagnose click-through regression observed during Phase 5 verification — Spy++ canvas WM_LBUTTONDOWN, verify inject_click fires, check ChildWindowFromPointEx CWP_SKIPTRANSPARENT effect against WS_EX_LAYERED window. Either fix the routing or document the limitation.
+- **Phase 07 / fix-up**: Add on-bubble close glyph (small "X" in top-right of drag strip) so the bubble is dismissable without the tray menu. Hit-tested via controls.hit_button → bubble.destroy().
 
 ### Blockers/Concerns
 
@@ -144,13 +153,15 @@ None yet.
 - **Phase 6**: Ctrl+Z vs. Cornerstone undo conflict must be confirmed with user before ship; safer default Ctrl+Alt+Z available
 - **Phase 8**: Clinic AV product unknown; budget time for allowlisting on target PC
 - **Phase 1 / runtime**: Cornerstone (legacy LOB) may conflict with Per-Monitor-V2 DPI awareness — needs empirical test
-- **Phase 5 / runtime**: `config.json` in app directory may be blocked by clinic IT; have `%LOCALAPPDATA%` fallback ready
+- **Phase 5 / runtime**: ~~`config.json` in app directory may be blocked by clinic IT; have `%LOCALAPPDATA%` fallback ready~~ RESOLVED 2026-04-13 in Plan 05-02 verification CHECK 4 — `%LOCALAPPDATA%\UltimateZoom\config.json` fallback verified working under simulated repo-dir ACL lockdown.
+- **Phase 4 / runtime**: Click-through (LAYT-02) appears NOT to be working in real use despite Phase 4-03 inject_click implementation. Surfaced during Phase 5 verification when user observed the bubble consuming clicks instead of passing them through. Diagnostic plan needed (proposed Phase 04-04).
+- **Phase 4 / UX**: No on-bubble close button — user had to kill the process to close the bubble during verification. Fix needed before clinic deploy (likely combined with Phase 7 tray work or as a small fix-up).
 - **Phase 8 / packaging**: Dev box has Python 3.14.3 installed, not the research-specified 3.11.9. Phase 1 stdlib-only modules pass on 3.14.3 without issue, but PyInstaller 6.11.1 + mss 10.1.0 + pywin32 311 + Pillow 11.3.0 + numpy 2.2.6 wheel compatibility with 3.14 must be verified before Plan 03 (mss) or Phase 8 (packaging). Either install 3.11.9 side-by-side or confirm 3.14 wheels exist for all pinned deps.
 
 ## Session Continuity
 
-Last session: 2026-04-13T20:28:10.473Z
-Stopped at: Completed 05-01-PLAN.md (config persistence core module: config_path + write_atomic + load + ConfigWriter with 500ms debounce; 28 unit + 6 smoke tests green)
+Last session: 2026-04-13T20:51:13Z
+Stopped at: Completed 05-02-PLAN.md (config persistence integration: app.py loads config before AppState; BubbleWindow.destroy() flushes pending writes synchronously; 5/5 manual checks approved on Windows 11 dev box; PHASE 05 COMPLETE — all 4 PERS-* requirements end-to-end verified)
 Resume file: None
 
-Next step: `/gsd:execute-phase 05` (Phase 05 config-persistence — debounced config.json writer wired to AppState observer + %LOCALAPPDATA% fallback path for clinic IT-locked app-directory) OR `/gsd:execute-phase 06` (Phase 06 global-hotkey — Ctrl+Alt+Z show/hide via ctypes.user32.RegisterHotKey). Both phases are independent of Phase 04 work. User should also run the 5-step manual verification of Plan 04-03 Task 3 (Notepad click-through, rapid-tap CPU check, optional Cornerstone test, --no-click-injection fallback, regression drag/shape/zoom/resize) when next at the clinic dev box.
+Next step: `/gsd:execute-phase 06` (Phase 06 global-hotkey — Ctrl+Alt+Z show/hide via ctypes.user32.RegisterHotKey + daemon message-pump thread; covers HOTK-01..05) OR `/gsd:execute-phase 03` (finish Phase 03 capture loop — only 03-02 BubbleWindow capture wiring + 7-point manual checkpoint remaining; covers CAPT-01, CAPT-05, CAPT-06). Both are independent of each other. ALSO: two UX gaps surfaced during Phase 05 verification need follow-up plans before clinic deploy — (a) no on-bubble close button (Phase 7 tray work or small fix-up plan), (b) click-through not actually working in real use despite Phase 04-03 inject_click (proposed Phase 04-04 diagnostic plan: Spy++ canvas WM_LBUTTONDOWN, verify inject_click fires, fix routing). See 05-02-SUMMARY.md "Issues Observed" section for details.

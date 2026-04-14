@@ -33,6 +33,15 @@ def main() -> int:
             "Use if PostMessageW injection misbehaves against Cornerstone."
         ),
     )
+    parser.add_argument(
+        "--no-hotkey",
+        action="store_true",
+        help=(
+            "Disable the global show/hide hotkey. Bubble must be closed "
+            "via tray (Phase 7) or process kill. Use if Phase 6 RegisterHotKey "
+            "conflicts with clinic keyboard hook software."
+        ),
+    )
     args = parser.parse_args()
 
     # OVER-05 proof: PMv2 survived Phase 2's Tk + ctypes imports.
@@ -47,6 +56,27 @@ def main() -> int:
         f"[config] loaded path={path} "
         f"zoom={snap.zoom:.2f} shape={snap.shape} "
         f"geometry={snap.w}x{snap.h}+{snap.x}+{snap.y}",
+        flush=True,
+    )
+
+    # Phase 6 (HOTK-04): parse the raw hotkey field from the same file
+    # config.load consumed.  config.load returns a StateSnapshot and
+    # ignores unknown fields (hotkey is one), so we re-read the raw
+    # dict just for the hotkey parse.  Missing / corrupt -> parse_hotkey
+    # returns the (MOD_CONTROL, VK_Z) default.
+    import json as _json
+    raw_cfg: dict = {}
+    if path.exists():
+        try:
+            with open(path, "r", encoding="utf-8") as _f:
+                raw_cfg = _json.load(_f)
+                if not isinstance(raw_cfg, dict):
+                    raw_cfg = {}
+        except (OSError, _json.JSONDecodeError):
+            raw_cfg = {}
+    hotkey_mods, hotkey_vk = config.parse_hotkey(raw_cfg.get("hotkey"))
+    print(
+        f"[config] hotkey modifiers=0x{hotkey_mods:04x} vk=0x{hotkey_vk:02x}",
         flush=True,
     )
 
@@ -75,6 +105,40 @@ def main() -> int:
     writer = config.ConfigWriter(state, bubble.root, path)
     writer.register()
     bubble.attach_config_writer(writer)
+
+    # Phase 6: construct HotkeyManager AFTER attach_config_writer (bubble.root
+    # is live), BEFORE start_capture (capture worker should only spin up if
+    # the app is actually ready to pump messages).  stop() ordering is handled
+    # by BubbleWindow.destroy() which runs _hotkey_manager.stop() BEFORE
+    # capture_worker.stop() (Open Question #4 in 06-RESEARCH.md).
+    if args.no_hotkey:
+        print("[hotkey] disabled by --no-hotkey flag", flush=True)
+    elif sys.platform == "win32":
+        from magnifier_bubble.hotkey import HotkeyManager
+        hm = HotkeyManager(
+            bubble.root,
+            bubble.toggle,          # main-thread callback; HOTK-03 handoff
+            hotkey_mods,
+            hotkey_vk,
+        )
+        ok = hm.start(timeout=1.0)
+        if ok:
+            bubble.attach_hotkey_manager(hm)
+            print(
+                f"[hotkey] registered modifiers=0x{hotkey_mods:04x} "
+                f"vk=0x{hotkey_vk:02x} tid={hm._tid}",
+                flush=True,
+            )
+        else:
+            # Graceful failure — app continues (tray in Phase 7 will still
+            # provide Show/Hide).  HotkeyManager itself already logged the
+            # specific [hotkey] registration-failed message with the error code.
+            print(
+                "[hotkey] continuing without hotkey support",
+                flush=True,
+            )
+    else:
+        print("[hotkey] skipped (non-Windows platform)", flush=True)
 
     # Phase 3: start the 30 fps capture producer thread.  Gated by
     # sys.platform so non-Windows CI does not blow up on `import mss`.

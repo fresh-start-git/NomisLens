@@ -299,3 +299,140 @@ def test_app_wires_config_writer():
         "app.py must call writer.register() to attach the "
         "AppState.on_change observer (PERS-02)"
     )
+
+
+# ---- Phase 6 structural lints (Plan 06-03 Task 2) ----
+
+
+def test_app_has_no_hotkey_flag():
+    """HOTK-04: --no-hotkey must be an argparse flag in app.main()."""
+    import inspect
+    from magnifier_bubble import app
+    src = inspect.getsource(app)
+    assert '"--no-hotkey"' in src, (
+        "app.py must declare --no-hotkey argparse flag (HOTK-04 escape hatch)"
+    )
+    assert 'args.no_hotkey' in src
+
+
+def test_app_constructs_hotkey_manager_after_attach_config_writer():
+    """HOTK-05 ordering: HotkeyManager() must be called AFTER
+    bubble.attach_config_writer(...) so bubble.root is live."""
+    import ast
+    import inspect
+    from magnifier_bubble import app
+
+    src = inspect.getsource(app)
+    tree = ast.parse(src)
+
+    hm_lines: list[int] = []
+    acw_lines: list[int] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id == "HotkeyManager":
+                hm_lines.append(node.lineno)
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "attach_config_writer"
+            ):
+                acw_lines.append(node.lineno)
+
+    assert hm_lines, "app.py must call HotkeyManager(...) somewhere"
+    assert acw_lines, "app.py must call bubble.attach_config_writer(...)"
+    assert min(acw_lines) < min(hm_lines), (
+        f"attach_config_writer must precede HotkeyManager construction; "
+        f"got attach_config_writer at line {min(acw_lines)} "
+        f"and HotkeyManager at line {min(hm_lines)}"
+    )
+
+
+def test_app_attaches_hotkey_manager_after_construction():
+    """HOTK-05: attach_hotkey_manager must follow HotkeyManager(...) so
+    the ONLY manager attached is one whose start() returned True."""
+    import ast
+    import inspect
+    from magnifier_bubble import app
+
+    src = inspect.getsource(app)
+    tree = ast.parse(src)
+
+    hm_lines: list[int] = []
+    ahm_lines: list[int] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id == "HotkeyManager":
+                hm_lines.append(node.lineno)
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "attach_hotkey_manager"
+            ):
+                ahm_lines.append(node.lineno)
+
+    assert hm_lines, "app.py must construct HotkeyManager"
+    assert ahm_lines, (
+        "app.py must call bubble.attach_hotkey_manager(hm) after "
+        "HotkeyManager.start() returns True"
+    )
+    assert min(hm_lines) < min(ahm_lines), (
+        f"HotkeyManager() must precede attach_hotkey_manager() call"
+    )
+
+
+def test_app_uses_parse_hotkey_on_raw_config():
+    """HOTK-04: parse_hotkey must consume the raw dict, not the StateSnapshot."""
+    import inspect
+    from magnifier_bubble import app
+    src = inspect.getsource(app)
+    assert "parse_hotkey" in src, (
+        "app.py must call config.parse_hotkey(...) (HOTK-04 config integration)"
+    )
+    # raw config dict read is required (not a StateSnapshot attribute lookup)
+    assert "raw_cfg" in src or "raw.get(" in src or 'raw_cfg.get("hotkey")' in src, (
+        "app.py must read the raw hotkey dict from json, not from StateSnapshot"
+    )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="DPI API is Windows-only")
+def test_main_py_no_hotkey_flag_smoke():
+    """--no-hotkey path: stdout contains the disabled message."""
+    import os as _os
+    env = {**_os.environ, "ULTIMATE_ZOOM_SMOKE": "1"}
+    result = subprocess.run(
+        [sys.executable, str(MAIN_PY), "--no-hotkey"],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+        env=env,
+        timeout=10,
+    )
+    assert result.returncode == 0, (
+        f"main.py --no-hotkey exited {result.returncode}; "
+        f"stderr:\n{result.stderr}"
+    )
+    assert "[hotkey] disabled by --no-hotkey flag" in result.stdout, (
+        f"missing [hotkey] disabled line in stdout:\n{result.stdout}"
+    )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="DPI API is Windows-only")
+def test_main_py_default_smoke_contains_hotkey_line():
+    """Default path: stdout contains some [hotkey] line (registered,
+    registration failed, or skipped — all acceptable)."""
+    import os as _os
+    env = {**_os.environ, "ULTIMATE_ZOOM_SMOKE": "1"}
+    result = subprocess.run(
+        [sys.executable, str(MAIN_PY)],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+        env=env,
+        timeout=10,
+    )
+    assert result.returncode == 0, (
+        f"main.py exited {result.returncode}; stderr:\n{result.stderr}"
+    )
+    assert "[hotkey]" in result.stdout, (
+        f"missing any [hotkey] line in stdout; got:\n{result.stdout}"
+    )

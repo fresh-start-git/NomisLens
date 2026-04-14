@@ -107,9 +107,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The hotkey is implemented via `ctypes + user32.RegisterHotKey` on a daemon message-pump thread — no `keyboard` library, no `pynput`
   4. Editing `config.json` to change the hotkey (e.g., to Ctrl+Alt+Z) and relaunching picks up the new binding
   5. If the hotkey is already registered by another app, the app surfaces a graceful message and continues running (does not crash), and on clean exit the hotkey is unregistered
-**Plans**: 4 plans
-- [ ] 06-01-PLAN.md — Wave 0 foundation: extend winconst.py with Phase 6 Win32 constants + create tests/test_hotkey.py + tests/test_hotkey_smoke.py stubs + extend tests/test_config.py + tests/test_window_phase4.py with skip-pending stubs (unblocks every downstream pytest command; covers HOTK-01, HOTK-05 via structural lints)
-- [ ] 06-02-PLAN.md — Core implementation: create src/magnifier_bubble/hotkey.py HotkeyManager (non-daemon worker thread, RegisterHotKey, WM_HOTKEY pump, WM_QUIT shutdown, 1409 graceful failure) + add parse_hotkey helper to config.py + fill in all Wave 0 stubs with real assertions (covers HOTK-01, HOTK-04, HOTK-05)
+**Plans**: 4 plans (2/4 complete)
+- [x] 06-01-PLAN.md — Wave 0 foundation: extend winconst.py with Phase 6 Win32 constants + create tests/test_hotkey.py + tests/test_hotkey_smoke.py stubs + extend tests/test_config.py + tests/test_window_phase4.py with skip-pending stubs (unblocks every downstream pytest command; covers HOTK-01, HOTK-05 via structural lints) (completed 2026-04-14, see 06-01-SUMMARY.md)
+- [x] 06-02-PLAN.md — Core implementation: create src/magnifier_bubble/hotkey.py HotkeyManager (non-daemon worker thread, RegisterHotKey, WM_HOTKEY pump, WM_QUIT shutdown, 1409 graceful failure) + add parse_hotkey helper to config.py + fill in all Wave 0 stubs with real assertions (covers HOTK-01, HOTK-04, HOTK-05) (completed 2026-04-14, see 06-02-SUMMARY.md)
 - [ ] 06-03-PLAN.md — Integration: add show/hide/toggle/attach_hotkey_manager to BubbleWindow + wire HotkeyManager into app.py main() (construct after attach_config_writer, before start_capture) + --no-hotkey CLI flag + AST lints in tests/test_main_entry.py (covers HOTK-01, HOTK-03, HOTK-04, HOTK-05)
 - [ ] 06-04-PLAN.md — Manual verification on Windows 11 dev box: CHECK 0 user decision (Ctrl+Z vs Ctrl+Alt+Z default vs Cornerstone undo conflict) + CHECK 1..5 manual pass/fail against all five Phase 6 Success Criteria (covers HOTK-02, HOTK-03, HOTK-04, HOTK-05 end-to-end)
 

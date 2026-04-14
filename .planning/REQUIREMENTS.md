@@ -45,11 +45,11 @@
 
 ### Hotkey
 
-- [ ] **HOTK-01**: Ctrl+Z registered as a global system-wide hotkey via ctypes + user32.RegisterHotKey (no keyboard library)
+- [x] **HOTK-01**: Ctrl+Z registered as a global system-wide hotkey via ctypes + user32.RegisterHotKey (no keyboard library)
 - [ ] **HOTK-02**: Hotkey works even when Cornerstone or any other app has focus
 - [ ] **HOTK-03**: Hotkey toggles the bubble visible/hidden
-- [ ] **HOTK-04**: Hotkey is configurable in config.json (default: Ctrl+Z; safer alternative Ctrl+Alt+Z available if Cornerstone undo conflict confirmed)
-- [ ] **HOTK-05**: Hotkey is registered/unregistered cleanly on app start/exit; graceful failure message if already registered
+- [x] **HOTK-04**: Hotkey is configurable in config.json (default: Ctrl+Z; safer alternative Ctrl+Alt+Z available if Cornerstone undo conflict confirmed)
+- [x] **HOTK-05**: Hotkey is registered/unregistered cleanly on app start/exit; graceful failure message if already registered
 
 ### Tray
 
@@ -135,11 +135,11 @@
 | CTRL-07 | Phase 4 | Complete |
 | CTRL-08 | Phase 4 | Complete |
 | CTRL-09 | Phase 4 | Complete |
-| HOTK-01 | Phase 6 | Pending |
+| HOTK-01 | Phase 6 | Complete |
 | HOTK-02 | Phase 6 | Pending |
 | HOTK-03 | Phase 6 | Pending |
-| HOTK-04 | Phase 6 | Pending |
-| HOTK-05 | Phase 6 | Pending |
+| HOTK-04 | Phase 6 | Complete |
+| HOTK-05 | Phase 6 | Complete |
 | TRAY-01 | Phase 7 | Pending |
 | TRAY-02 | Phase 7 | Pending |
 | TRAY-03 | Phase 7 | Pending |

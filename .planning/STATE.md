@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Completed 06-01-PLAN.md (Wave 0 test scaffolding for Phase 6 global hotkey: 9 winconst constants + 5 pure-Python structural lint stubs in test_hotkey.py + 3 Windows-only integration stubs in test_hotkey_smoke.py + 3 HOTK-04 parser stubs in test_config.py + 1 HOTK-03 visibility-wrapper stub in test_window_phase4.py; all 35 winconst tests pass, all 8+4 stubs skip cleanly, zero plan deviations)"
-last_updated: "2026-04-14T04:04:27.551Z"
+stopped_at: "Completed 06-02-PLAN.md (Hotkey core: HotkeyManager class in src/magnifier_bubble/hotkey.py with RegisterHotKey worker thread + PostThreadMessageW(WM_QUIT) cooperative stop + UnregisterHotKey from same thread; config.parse_hotkey helper with graceful (MOD_CONTROL, VK_Z) default on any malformed input; all 11 Wave 0 stubs flipped to real assertions — 5 pure-Python structural lints + 3 Windows-only integration tests + 3 HOTK-04 parser tests; 2 auto-fixed deviations — WinDLL(use_last_error=True) for real GetLastError surfacing + top.mainloop() cross-thread test pattern)"
+last_updated: "2026-04-14T04:52:00Z"
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 17
-  completed_plans: 13
-  percent: 76
+  completed_plans: 14
+  percent: 82
 ---
 
 # Project State
@@ -25,15 +25,15 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 ## Current Position
 
 Phase: 06 (global-hotkey) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 13
-- Average duration: ~12 min
-- Total execution time: ~2.8 hours
+- Total plans completed: 14
+- Average duration: ~14 min
+- Total execution time: ~3.6 hours
 
 **By Phase:**
 
@@ -44,12 +44,12 @@ Plan: 2 of 4
 | 03-capture-loop | 1 | 8 min | 8 min |
 | 04-controls-shape-resize | 3 | 75 min | 25 min |
 | 05-config-persistence | 2 | 29 min | 14.5 min |
-| 06-global-hotkey | 1 | 5 min | 5 min |
+| 06-global-hotkey | 2 | 53 min | 26.5 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 04-03 (28 min), 05-01 (8 min), 05-02 (~21 min), 06-01 (5 min)
-- Trend: Phase 6 scaffolding plan 06-01 landed exactly as written — zero deviations, 4 tasks in ~5 minutes. Wave 0 stub pattern (3rd occurrence; Phase 04-01 + Phase 05-01 were the prior two) created 9 Win32 constants + 12 skip stubs so Plans 06-02 / 06-03 can start red-to-green immediately. Pre-existing capture/window-integration failures (6 failed + 4 errors with `TypeError: 'Event' object not callable`) documented in .planning/phases/06-global-hotkey/deferred-items.md and confirmed identical on pre-change master baseline — out of Plan 06-01 scope, flagged for a Phase 04-04 diagnostic plan per existing STATE.md Pending Todos. Full winconst suite: 35 pass; full hotkey stub suite: 8 skipped; full config+window_phase4 suite: 45 pass / 4 skipped.
+- Last 5 plans: 05-01 (8 min), 05-02 (~21 min), 06-01 (5 min), 06-02 (~48 min)
+- Trend: Plan 06-02 took ~48 min (vs 5 min scaffolding baseline) — the time premium came from 2 auto-fixed Rule 1 bugs that required iterative Win32 debugging on the actual dev box. (1) ctypes.windll.user32 does NOT enable ctypes' save/restore of GetLastError; discovery required running the real double-register smoke test and seeing _reg_err==0 instead of 1409. Fix: module-level WinDLL("user32", use_last_error=True) handle lazy-initialized in _run(). (2) Plan's top.update() polling loop for the WM_HOTKEY integration test fails on Python 3.11/Tcl 8.6 because cross-thread root.after() requires the main thread to be INSIDE mainloop(). Fix: top.mainloop() + top.after(10, top.quit) from the worker's callback + threading-based 2s watchdog safety net. All 5 test_hotkey structural lints + 3 test_hotkey_smoke integration + 3 test_config parser tests PASS; zero regressions on 250 passed tests (excl. 2 pre-existing broken files documented in deferred-items.md).
 
 *Updated after each plan completion*
 
@@ -70,6 +70,7 @@ Plan: 2 of 4
 | Phase 05 P01 | 8 min | 3 tasks | 4 files |
 | Phase 05 P02 | ~21 min | 3 tasks (2 implementation + 1 human-verify, all 5/5 checks approved) | 4 files |
 | Phase 06 P01 | 5 min | 4 tasks | 7 files |
+| Phase 06 P02 | ~48 min | 3 tasks (2 auto-fixed Rule 1 bugs) | 5 files |
 
 ## Accumulated Context
 
@@ -146,6 +147,13 @@ Recent decisions affecting current work:
 - [Phase 05]: PHASE 05 COMPLETE — All 4 PERS-* requirements end-to-end verified on real Windows 11 hardware. Persistence layer production-ready. Phase 6 (Global Hotkey) and Phase 7 (System Tray) both ready to start.
 - [Phase 06]: [Phase 06-global-hotkey/01]: Wave 0 test scaffolding — 9 winconst constants (MOD_* / VK_Z / WM_HOTKEY / WM_QUIT / ERROR_HOTKEY_ALREADY_REGISTERED) + 12 skip stubs across 4 test files let Plans 06-02 and 06-03 begin red-to-green work by replacing skip lines one test at a time.
 - [Phase 06]: [Phase 06-global-hotkey/01]: Wave 0 stub pattern (3rd occurrence after Phase 04-01 + Phase 05-01) uses pathlib.exists() probe BEFORE try/except import — lets Linux CI skip cleanly without triggering ctypes import errors on Windows-only modules.
+- [Phase 06]: [Phase 06-global-hotkey/02]: HotkeyManager registers + unregisters from the SAME _run() method (AST-walk structural lint enforces this). MSDN ties hotkey ownership to the calling thread id, so any stop() that tries to UnregisterHotKey from the main thread would leak the registration. Cooperative shutdown via PostThreadMessageW(WM_QUIT) breaks the worker's blocking GetMessageW loop; the finally: block runs UnregisterHotKey on the correct thread before the worker exits. Non-daemon thread (daemon=False) guarantees the finally executes even under abrupt interpreter teardown.
+- [Phase 06]: [Phase 06-global-hotkey/02]: [Rule 1 bug fix] ctypes.windll.user32 does NOT enable use_last_error, so ctypes.get_last_error() returns 0 even after RegisterHotKey fails — defeating the ERROR_HOTKEY_ALREADY_REGISTERED (1409) graceful-failure surfacing. Added module-level `_U32_ERR = ctypes.WinDLL("user32", use_last_error=True)` lazy-initialized on first _run() entry. All Win32 calls on the worker thread route through this handle. kernel32.GetCurrentThreadId stays on plain ctypes.windll (cannot fail).
+- [Phase 06]: [Phase 06-global-hotkey/02]: [Rule 1 bug fix — test plan deviation] Plan's top.update() polling loop for the WM_HOTKEY integration test fails on Python 3.11/Tcl 8.6 with "main thread is not in main loop" from the worker's root.after() call. top.update() does NOT count as being inside mainloop() for the purpose of dispatching cross-thread after-callbacks. Test now enters top.mainloop() after posting WM_HOTKEY; on_hotkey calls top.after(10, top.quit) to exit. Using a Toplevel's mainloop keeps the session-scoped tk_session_root fixture intact for subsequent tests (top.quit exits mainloop without destroying the session root).
+- [Phase 06]: [Phase 06-global-hotkey/02]: MOD_NOREPEAT is OR'd into self._modifiers in HotkeyManager.__init__ — callers MUST NOT include it. Centralizes the auto-repeat-suppression policy so every HotkeyManager instance gets the MSDN-recommended Win7+ behavior for free.
+- [Phase 06]: [Phase 06-global-hotkey/02]: parse_hotkey lives in config.py (not a new module) because Plan 06-03 will call it from the same config.load() call site — flat import graph. The parser NEVER raises: any malformed dict falls back to (MOD_CONTROL, VK_Z) and the app still starts. Supports case-insensitive modifier names and single-char A-Z / 0-9 VK codes.
+- [Phase 06]: [Phase 06-global-hotkey/02]: GetMessageW.restype is explicitly ctypes.c_int (NOT wintypes.BOOL). -1 is a legal error return from GetMessageW; BOOL width would mask the sign bit and the error would look like an ordinary message. Enforced by structural lint test_hotkey_applies_argtypes.
+- [Phase 06]: [Phase 06-global-hotkey/02]: PeekMessageW(WM_USER) called before RegisterHotKey to force the worker's thread message queue into existence — Pitfall 9 defense against the race where an outside thread calls PostThreadMessageW against self._tid before the worker's first GetMessageW runs.
 
 ### Pending Todos
 
@@ -165,8 +173,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-14T04:04:27.546Z
-Stopped at: Completed 06-01-PLAN.md (Wave 0 test scaffolding for Phase 6 global hotkey: 9 winconst constants + 5 pure-Python structural lint stubs in test_hotkey.py + 3 Windows-only integration stubs in test_hotkey_smoke.py + 3 HOTK-04 parser stubs in test_config.py + 1 HOTK-03 visibility-wrapper stub in test_window_phase4.py; all 35 winconst tests pass, all 8+4 stubs skip cleanly, zero plan deviations)
+Last session: 2026-04-14T04:52:00Z
+Stopped at: Completed 06-02-PLAN.md (Hotkey core: HotkeyManager class in src/magnifier_bubble/hotkey.py with RegisterHotKey worker thread + PostThreadMessageW(WM_QUIT) cooperative stop + UnregisterHotKey from same thread; config.parse_hotkey helper with graceful (MOD_CONTROL, VK_Z) default on any malformed input; all 11 Wave 0 stubs flipped to real assertions — 5 pure-Python structural lints + 3 Windows-only integration tests + 3 HOTK-04 parser tests; 2 auto-fixed deviations — WinDLL(use_last_error=True) for real GetLastError surfacing + top.mainloop() cross-thread test pattern)
 Resume file: None
 
-Next step: `/gsd:execute-plan 06-02` (Plan 06-02: implement `src/magnifier_bubble/hotkey.py` + extend `config.parse_hotkey` — this auto-unskips the 5 test_hotkey.py stubs, 3 test_hotkey_smoke.py stubs, and 3 test_config.py parser stubs created by Plan 06-01). Then `/gsd:execute-plan 06-03` wires the hotkey pump into BubbleWindow with `show/hide/toggle` (auto-unskips test_bubble_show_hide_toggle). Plans 06-04 handles the manual verification checkpoint. ALSO STILL OPEN: two UX gaps from Phase 05 verification — (a) no on-bubble close button (Phase 7 tray or small fix-up plan); (b) click-through not actually working in real use despite Phase 04-03 inject_click (proposed Phase 04-04 diagnostic plan). Pre-existing test failures in test_capture_smoke.py + test_window_integration.py + test_window_config_integration.py (TypeError 'Event' object not callable, 6 failed + 4 errors) tracked in .planning/phases/06-global-hotkey/deferred-items.md — also a Phase 04-04 candidate.
+Next step: `/gsd:execute-plan 06-03` (wire HotkeyManager + parse_hotkey into app.py + add BubbleWindow.show/hide/toggle — auto-unskips test_window_visibility_hotkey_toggle in test_window_phase4.py). Then `/gsd:execute-plan 06-04` handles the manual verification checkpoint on the real dev box (press the configured hotkey, see the bubble toggle, confirm no collision with Cornerstone undo). ALSO STILL OPEN: two UX gaps from Phase 05 verification — (a) no on-bubble close button (Phase 7 tray or small fix-up plan); (b) click-through not actually working in real use despite Phase 04-03 inject_click (proposed Phase 04-04 diagnostic plan). Pre-existing test failures in test_capture_smoke.py + test_window_integration.py + test_window_config_integration.py (TypeError 'Event' object not callable, 6 failed + 4 errors) tracked in .planning/phases/06-global-hotkey/deferred-items.md — also a Phase 04-04 candidate.

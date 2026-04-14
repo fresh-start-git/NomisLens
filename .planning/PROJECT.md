@@ -33,7 +33,7 @@ Clicks and touches pass through the magnified content area to whatever app is un
 ### Active
 - [ ] Teal/soft-blue border (3–4px) visible on any background
 - [ ] Semi-transparent dark strips for top/bottom controls
-- [ ] Ctrl+Z global hotkey toggles bubble visible/hidden (works even when Cornerstone has focus)
+- [x] Ctrl+Alt+Z global hotkey toggles bubble visible/hidden (works even when Cornerstone has focus) — *Validated in Phase 6: Global Hotkey*
 - [ ] System tray icon with Show/Hide, Always on Top toggle, Exit
 - [x] Persist config (position, size, zoom, shape) to config.json on every change; restore on launch — *Validated in Phase 5: Config Persistence*
 - [ ] requirements.txt with pinned versions
@@ -58,7 +58,7 @@ Clicks and touches pass through the magnified content area to whatever app is un
 
 ## Constraints
 
-- **Tech Stack**: Python 3.11+, mss (screen capture), pywin32 (Windows API), tkinter (UI), pystray (tray), keyboard or ctypes (global hotkey), PyInstaller (build)
+- **Tech Stack**: Python 3.11+, mss (screen capture), pywin32 (Windows API), tkinter (UI), pystray (tray), ctypes RegisterHotKey (global hotkey — no keyboard lib), PyInstaller (build)
 - **Performance**: 30fps minimum in the magnification loop; mss only — no PIL.ImageGrab in the main loop
 - **Accessibility**: All touch targets ≥ 44×44px for finger use on clinic touchscreen
 - **Deployment**: Single .exe via PyInstaller — no external dependencies at runtime
@@ -75,4 +75,4 @@ Clicks and touches pass through the magnified content area to whatever app is un
 | config.json in app directory | Predictable location, easy for non-technical staff to find/reset | — Pending |
 
 ---
-*Last updated: 2026-04-14 — Phase 5 (Config Persistence) complete*
+*Last updated: 2026-04-13 — Phase 6 (Global Hotkey) complete*

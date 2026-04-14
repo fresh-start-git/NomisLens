@@ -3,14 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Completed 06-02-PLAN.md (Hotkey core: HotkeyManager class in src/magnifier_bubble/hotkey.py with RegisterHotKey worker thread + PostThreadMessageW(WM_QUIT) cooperative stop + UnregisterHotKey from same thread; config.parse_hotkey helper with graceful (MOD_CONTROL, VK_Z) default on any malformed input; all 11 Wave 0 stubs flipped to real assertions — 5 pure-Python structural lints + 3 Windows-only integration tests + 3 HOTK-04 parser tests; 2 auto-fixed deviations — WinDLL(use_last_error=True) for real GetLastError surfacing + top.mainloop() cross-thread test pattern)"
-last_updated: "2026-04-14T04:52:00Z"
+stopped_at: "Completed 06-03-PLAN.md (Hotkey app wiring: BubbleWindow.show/hide/toggle + attach_hotkey_manager duck-typed symmetric with attach_config_writer; destroy()-chain hotkey.stop() between config flush and capture stop; app.py main() HotkeyManager construction after attach_config_writer + before start_capture with bubble.toggle as main-thread callback; raw json re-read for parse_hotkey because config.load drops unknown fields; --no-hotkey argparse flag escape hatch for clinic keyboard-hook conflicts; 6 new test_main_entry.py AST + subprocess lints + 1 filled test_window_phase4.py show/hide/toggle stub; zero deviations; 253 passed 5/5 runs vs 247 baseline = net +6 tests, no regressions)"
+last_updated: "2026-04-14T04:53:46.110Z"
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 17
-  completed_plans: 14
-  percent: 82
+  completed_plans: 15
 ---
 
 # Project State
@@ -25,15 +24,15 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 ## Current Position
 
 Phase: 06 (global-hotkey) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 14
-- Average duration: ~14 min
-- Total execution time: ~3.6 hours
+- Total plans completed: 15
+- Average duration: ~13.5 min
+- Total execution time: ~3.7 hours
 
 **By Phase:**
 
@@ -44,12 +43,12 @@ Plan: 3 of 4
 | 03-capture-loop | 1 | 8 min | 8 min |
 | 04-controls-shape-resize | 3 | 75 min | 25 min |
 | 05-config-persistence | 2 | 29 min | 14.5 min |
-| 06-global-hotkey | 2 | 53 min | 26.5 min |
+| 06-global-hotkey | 3 | 60 min | 20 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 05-01 (8 min), 05-02 (~21 min), 06-01 (5 min), 06-02 (~48 min)
-- Trend: Plan 06-02 took ~48 min (vs 5 min scaffolding baseline) — the time premium came from 2 auto-fixed Rule 1 bugs that required iterative Win32 debugging on the actual dev box. (1) ctypes.windll.user32 does NOT enable ctypes' save/restore of GetLastError; discovery required running the real double-register smoke test and seeing _reg_err==0 instead of 1409. Fix: module-level WinDLL("user32", use_last_error=True) handle lazy-initialized in _run(). (2) Plan's top.update() polling loop for the WM_HOTKEY integration test fails on Python 3.11/Tcl 8.6 because cross-thread root.after() requires the main thread to be INSIDE mainloop(). Fix: top.mainloop() + top.after(10, top.quit) from the worker's callback + threading-based 2s watchdog safety net. All 5 test_hotkey structural lints + 3 test_hotkey_smoke integration + 3 test_config parser tests PASS; zero regressions on 250 passed tests (excl. 2 pre-existing broken files documented in deferred-items.md).
+- Last 5 plans: 05-02 (~21 min), 06-01 (5 min), 06-02 (~48 min), 06-03 (~7 min)
+- Trend: Plan 06-03 returned to the Phase 06-01 scaffolding baseline (~7 min vs 06-02's ~48 min) because there were zero auto-fixed bugs and the plan was pure wiring (4 methods added to BubbleWindow + 1 argparse flag + 47-line app.py block + 6 AST tests). The Plan 06-02 HotkeyManager interface (HotkeyManager(root, on_hotkey, mods, vk) + start() + stop() + parse_hotkey(dict)) was load-bearing — Plan 06-03 consumed it verbatim. 253 passed 5/5 runs; one transient init.tcl flake observed during execution matches the known pre-existing ~1/5 rate on master baseline (STATE.md Phase 02/02 decision). Zero regressions from Plan 06-03 changes.
 
 *Updated after each plan completion*
 
@@ -71,6 +70,7 @@ Plan: 3 of 4
 | Phase 05 P02 | ~21 min | 3 tasks (2 implementation + 1 human-verify, all 5/5 checks approved) | 4 files |
 | Phase 06 P01 | 5 min | 4 tasks | 7 files |
 | Phase 06 P02 | ~48 min | 3 tasks (2 auto-fixed Rule 1 bugs) | 5 files |
+| Phase 06 P03 | ~7 min | 2 tasks (zero deviations) | 4 files |
 
 ## Accumulated Context
 
@@ -154,6 +154,13 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 06-global-hotkey/02]: parse_hotkey lives in config.py (not a new module) because Plan 06-03 will call it from the same config.load() call site — flat import graph. The parser NEVER raises: any malformed dict falls back to (MOD_CONTROL, VK_Z) and the app still starts. Supports case-insensitive modifier names and single-char A-Z / 0-9 VK codes.
 - [Phase 06]: [Phase 06-global-hotkey/02]: GetMessageW.restype is explicitly ctypes.c_int (NOT wintypes.BOOL). -1 is a legal error return from GetMessageW; BOOL width would mask the sign bit and the error would look like an ordinary message. Enforced by structural lint test_hotkey_applies_argtypes.
 - [Phase 06]: [Phase 06-global-hotkey/02]: PeekMessageW(WM_USER) called before RegisterHotKey to force the worker's thread message queue into existence — Pitfall 9 defense against the race where an outside thread calls PostThreadMessageW against self._tid before the worker's first GetMessageW runs.
+- [Phase 06]: [Phase 06-global-hotkey/03]: BubbleWindow.show()/hide()/toggle() wrap root.deiconify/withdraw + state.set_visible on the Tk main thread. toggle() reads state.snapshot().visible and dispatches to show() or hide(). HotkeyManager.__init__ takes on_hotkey as a Callable; Plan 06-03 passes bubble.toggle as a bound method (not a lambda) — the root.after(0, on_hotkey) handoff is entirely inside hotkey.py's worker loop.
+- [Phase 06]: [Phase 06-global-hotkey/03]: attach_hotkey_manager is duck-typed (no `from magnifier_bubble.hotkey import HotkeyManager` at window.py module scope) — identical discipline to Phase 5's attach_config_writer (no window.py → config.py edge) and Phase 4's deferred clickthru import. Keeps Windows-only ctypes surface out of window.py's import graph on non-Windows CI.
+- [Phase 06]: [Phase 06-global-hotkey/03]: destroy() ordering extended: config flush → hotkey.stop() → capture.stop() → wndproc.uninstall×3 → root.destroy. hotkey.stop() slots BETWEEN config flush (needs live root.after_cancel) and capture.stop() (needs HWND + frame queue drain). A late WM_HOTKEY after capture.stop() would try to schedule root.after(0, ...) on a partially-torn-down root; running hotkey.stop() first (PostThreadMessageW(WM_QUIT) → worker's GetMessageW breaks → UnregisterHotKey in finally) eliminates the race.
+- [Phase 06]: [Phase 06-global-hotkey/03]: app.py re-reads the raw config.json via `open(path) + json.load` because config.load() returns a StateSnapshot and drops unknown fields — including "hotkey". Extending config.load's return type would ripple Phase 5 tests and the StateSnapshot contract. The re-read is ~few hundred bytes once at startup, not on any hot path. raw_cfg is wrapped in try/except(OSError, JSONDecodeError) so a corrupt or missing file gracefully falls through to parse_hotkey's (MOD_CONTROL, VK_Z) default.
+- [Phase 06]: [Phase 06-global-hotkey/03]: Hotkey wiring is a three-way branch: `if args.no_hotkey: print([hotkey] disabled) / elif sys.platform == 'win32': construct + start + attach / else: print([hotkey] skipped)`. The non-Windows `else` emits a `[hotkey]` line so test_main_py_default_smoke_contains_hotkey_line passes on both platforms with a single assertion (`"[hotkey]" in stdout`).
+- [Phase 06]: [Phase 06-global-hotkey/03]: test_bubble_show_hide_toggle uses the existing module-scoped phase4_bubble fixture (NOT a fresh BubbleWindow as the plan's OPTION A suggested). tk.Tk() churn triggers Python 3.11+/tk 8.6 init.tcl flake (STATE.md Phase 02/02 decisions). Finally block restores state.set_visible(True) + root.deiconify so downstream tests in the module see a known-visible baseline.
+- [Phase 06]: [Phase 06-global-hotkey/03]: Phase 6 functional complete — Ctrl+Z (default) toggles bubble end-to-end on Windows dev box; `[hotkey] registered modifiers=0x0002 vk=0x5a tid=<DWORD>` emitted on launch. 5/5 full-suite runs green (253 passed, +6 from Plan 06-03). Plan 06-04 manual verification remains.
 
 ### Pending Todos
 
@@ -173,8 +180,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-14T04:52:00Z
-Stopped at: Completed 06-02-PLAN.md (Hotkey core: HotkeyManager class in src/magnifier_bubble/hotkey.py with RegisterHotKey worker thread + PostThreadMessageW(WM_QUIT) cooperative stop + UnregisterHotKey from same thread; config.parse_hotkey helper with graceful (MOD_CONTROL, VK_Z) default on any malformed input; all 11 Wave 0 stubs flipped to real assertions — 5 pure-Python structural lints + 3 Windows-only integration tests + 3 HOTK-04 parser tests; 2 auto-fixed deviations — WinDLL(use_last_error=True) for real GetLastError surfacing + top.mainloop() cross-thread test pattern)
+Last session: 2026-04-14T04:52:12Z
+Stopped at: Completed 06-03-PLAN.md (Hotkey app wiring: BubbleWindow.show/hide/toggle + attach_hotkey_manager duck-typed symmetric with attach_config_writer; destroy()-chain hotkey.stop() between config flush and capture stop; app.py main() HotkeyManager construction after attach_config_writer + before start_capture with bubble.toggle as main-thread callback; raw json re-read for parse_hotkey because config.load drops unknown fields; --no-hotkey argparse flag escape hatch for clinic keyboard-hook conflicts; 6 new test_main_entry.py AST + subprocess lints + 1 filled test_window_phase4.py show/hide/toggle stub; zero deviations; 253 passed 5/5 runs vs 247 baseline = net +6 tests, no regressions; manual Windows smoke — `[hotkey] registered modifiers=0x0002 vk=0x5a tid=<DWORD>` emitted on default launch, `[hotkey] disabled by --no-hotkey flag` on --no-hotkey)
 Resume file: None
 
-Next step: `/gsd:execute-plan 06-03` (wire HotkeyManager + parse_hotkey into app.py + add BubbleWindow.show/hide/toggle — auto-unskips test_window_visibility_hotkey_toggle in test_window_phase4.py). Then `/gsd:execute-plan 06-04` handles the manual verification checkpoint on the real dev box (press the configured hotkey, see the bubble toggle, confirm no collision with Cornerstone undo). ALSO STILL OPEN: two UX gaps from Phase 05 verification — (a) no on-bubble close button (Phase 7 tray or small fix-up plan); (b) click-through not actually working in real use despite Phase 04-03 inject_click (proposed Phase 04-04 diagnostic plan). Pre-existing test failures in test_capture_smoke.py + test_window_integration.py + test_window_config_integration.py (TypeError 'Event' object not callable, 6 failed + 4 errors) tracked in .planning/phases/06-global-hotkey/deferred-items.md — also a Phase 04-04 candidate.
+Next step: `/gsd:execute-plan 06-04` (manual verification checkpoint on the real dev box — press the configured hotkey, see the bubble toggle, confirm no collision with Cornerstone undo; if collision observed, switch default to Ctrl+Alt+Z in config.py _HOTKEY_DEFAULT and update VALIDATION.md). ALSO STILL OPEN: two UX gaps from Phase 05 verification — (a) no on-bubble close button (Phase 7 tray or small fix-up plan); (b) click-through not actually working in real use despite Phase 04-03 inject_click (proposed Phase 04-04 diagnostic plan). Pre-existing test failures in test_capture_smoke.py + test_window_integration.py + test_window_config_integration.py (TypeError 'Event' object not callable, 6 failed + 4 errors) tracked in .planning/phases/06-global-hotkey/deferred-items.md — also a Phase 04-04 candidate.

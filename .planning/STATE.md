@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Completed 06-03-PLAN.md (Hotkey app wiring: BubbleWindow.show/hide/toggle + attach_hotkey_manager duck-typed symmetric with attach_config_writer; destroy()-chain hotkey.stop() between config flush and capture stop; app.py main() HotkeyManager construction after attach_config_writer + before start_capture with bubble.toggle as main-thread callback; raw json re-read for parse_hotkey because config.load drops unknown fields; --no-hotkey argparse flag escape hatch for clinic keyboard-hook conflicts; 6 new test_main_entry.py AST + subprocess lints + 1 filled test_window_phase4.py show/hide/toggle stub; zero deviations; 253 passed 5/5 runs vs 247 baseline = net +6 tests, no regressions)"
-last_updated: "2026-04-14T04:53:46.110Z"
+stopped_at: "Completed 06-03-PLAN.md (Hotkey app wiring: BubbleWindow.show/hide/toggle + attach_hotkey_manager duck-typed symmetric with attach_config_writer; destroy()-chain hotkey.stop() between config flush and capture stop; app.py main() HotkeyManager construction after attach_config_writer + before start_capture with bubble.toggle as main-thread callback; raw json re-read for parse_hotkey because config.load drops unknown fields; --no-hotkey argparse flag escape hatch for clinic keyboard-hook conflicts; 6 new test_main_entry.py AST + subprocess lints + 1 filled test_window_phase4.py show/hide/toggle stub; zero deviations; 253 passed 5/5 runs vs 247 baseline = net +6 tests, no regressions; manual Windows smoke — `[hotkey] registered modifiers=0x0002 vk=0x5a tid=<DWORD>` emitted on default launch, `[hotkey] disabled by --no-hotkey flag` on --no-hotkey)"
+last_updated: "2026-04-14T13:05:22.254Z"
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State

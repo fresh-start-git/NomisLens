@@ -159,10 +159,12 @@ def install(
                 zone = "content"
             if zone == "drag":
                 return wc.HTCAPTION
-            if zone == "content":
-                return wc.HTTRANSPARENT
-            # zone == "control" falls through to default WndProc, which
-            # returns HTCLIENT for in-client-area points.
+            # content zone falls through to HTCLIENT so <Button-1> fires and
+            # inject_click can forward the click to the window below.
+            # HTTRANSPARENT was dropped here: it only propagates within the same
+            # thread, so cross-process windows (Cornerstone) never received it —
+            # the click was silently consumed.
+            # zone == "control" also falls through to HTCLIENT.
         # PyDLL holds GIL — prevents Tk timer dispatch with NULL thread state.
         return _py_user32.CallWindowProcW(old_proc, h, msg, wparam, lparam)
 
@@ -223,10 +225,10 @@ def install_child(
                 zone = compute_zone_fn(cx, cy, w, wh)
             except Exception:
                 zone = "content"
-            if zone == "content":
-                return wc.HTTRANSPARENT
-            # drag/control: let Tk's original canvas WndProc handle it
-            # (returns HTCLIENT → Tk fires <Button-1> → Pattern 2b drag).
+            # content/drag/control all fall through to Tk's original WndProc
+            # (HTCLIENT) so <Button-1> fires and inject_click can forward the
+            # click cross-process.  HTTRANSPARENT was dropped here — it only
+            # propagates same-thread and silently consumed cross-process clicks.
         # PyDLL holds GIL — prevents Tk timer dispatch with NULL thread state.
         return _py_user32.CallWindowProcW(old_proc, h, msg, wparam, lparam)
 

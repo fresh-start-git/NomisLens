@@ -26,7 +26,8 @@ ZOOM_STEP: float = 0.25
 
 # CTRL-08 resize range.
 MIN_SIZE: int = 150
-MAX_SIZE: int = 700
+MAX_SIZE: int = 700   # max height
+MAX_WIDTH: int = 1200  # max width — wider horizontal expansion allowed
 
 # CTRL-02 shape cycle state machine: circle -> rounded -> rect -> circle.
 SHAPE_CYCLE: dict[str, str] = {
@@ -46,11 +47,12 @@ class ButtonRect:
 
 
 def layout_controls(w: int, h: int) -> list[ButtonRect]:
+    close = ButtonRect("close", 0, 0, 44, DRAG_BAR_HEIGHT)
     shape = ButtonRect("shape", w - 44, 0, 44, DRAG_BAR_HEIGHT)
     zoom_out = ButtonRect("zoom_out", 0, h - CONTROL_BAR_HEIGHT, 44, CONTROL_BAR_HEIGHT)
     zoom_in = ButtonRect("zoom_in", w - 88, h - CONTROL_BAR_HEIGHT, 44, CONTROL_BAR_HEIGHT)
     resize = ButtonRect("resize", w - 44, h - CONTROL_BAR_HEIGHT, 44, CONTROL_BAR_HEIGHT)
-    return [shape, zoom_out, zoom_in, resize]
+    return [close, shape, zoom_out, zoom_in, resize]
 
 
 def hit_button(canvas_x: int, canvas_y: int, buttons: list[ButtonRect]) -> str | None:
@@ -87,6 +89,6 @@ def zoom_step(z: float, direction: int) -> float:
 
 def resize_clamp(w: int, h: int) -> tuple[int, int]:
     return (
-        max(MIN_SIZE, min(MAX_SIZE, w)),
+        max(MIN_SIZE, min(MAX_WIDTH, w)),
         max(MIN_SIZE, min(MAX_SIZE, h)),
     )

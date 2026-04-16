@@ -1,3 +1,10 @@
+import sys
+# sys.stdout / sys.stderr are None in a windowed (no-console) exe.
+if sys.stdout is not None:
+    sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
+if sys.stderr is not None:
+    sys.stderr.reconfigure(encoding="utf-8", line_buffering=True)
+
 import ctypes
 ctypes.windll.user32.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
 try:

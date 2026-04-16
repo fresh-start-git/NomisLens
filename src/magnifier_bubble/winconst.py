@@ -67,20 +67,31 @@ WDA_EXCLUDEFROMCAPTURE = 0x00000011
 # ---- Phase 4 additions ----
 
 # ChildWindowFromPointEx flags (winuser.h).
-# CWP_SKIPTRANSPARENT is load-bearing - without it, ChildWindowFromPointEx
-# returns our own WS_EX_LAYERED bubble and PostMessageW injection would
-# recurse into our canvas. See Pitfall I in 04-RESEARCH.md.
+# NOTE: CWP_SKIPTRANSPARENT only skips WS_EX_TRANSPARENT windows. Our bubble
+# uses WS_EX_LAYERED, so this flag does NOT skip us. clickthru.py uses a
+# z-order walk (GetWindow GW_HWNDNEXT) to skip own_hwnd by identity instead.
 CWP_SKIPINVISIBLE    = 0x0001
 CWP_SKIPDISABLED     = 0x0002
 CWP_SKIPTRANSPARENT  = 0x0004
 
 # Mouse button state bit flags for WM_*BUTTON* message wParam (winuser.h).
 MK_LBUTTON = 0x0001
+MK_RBUTTON = 0x0002
 
-# Mouse button message to complement the already-present WM_LBUTTONDOWN.
-# Used by clickthru.py to post UP immediately after DOWN - some targets
-# don't consume a lone DOWN.
-WM_LBUTTONUP = 0x0202
+# Mouse button messages.
+WM_LBUTTONUP   = 0x0202
+WM_RBUTTONDOWN = 0x0204
+WM_RBUTTONUP   = 0x0205
+WM_CONTEXTMENU = 0x007B
+
+# WM_POINTER messages (Windows 8+). WinUI3 (File Explorer, Win11 Notepad,
+# Settings) processes these natively via EnableMouseInPointer / pointer API.
+# WM_POINTER lParam carries SCREEN coordinates (not client coordinates).
+WM_POINTERDOWN = 0x0246
+WM_POINTERUP   = 0x0247
+
+# GetWindow relationship flags (winuser.h).
+GW_HWNDNEXT = 2  # Next window below in Z-order (same parent)
 
 # ---- Phase 6 additions ----
 

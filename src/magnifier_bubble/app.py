@@ -19,6 +19,28 @@ from magnifier_bubble import config, dpi
 from magnifier_bubble.state import AppState
 from magnifier_bubble.window import BubbleWindow
 
+_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+_APP_NAME = "NomisLens"
+
+
+def _register_startup() -> None:
+    """Add NomisLens to HKCU startup so it launches with Windows.
+
+    Uses the current executable path (sys.executable == NomisLens.exe when
+    packaged).  Silent no-op on any error or non-Windows platform.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import winreg
+        exe = sys.executable
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE
+        ) as key:
+            winreg.SetValueEx(key, _APP_NAME, 0, winreg.REG_SZ, f'"{exe}"')
+    except Exception:
+        pass
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -43,6 +65,9 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
+
+    # Register in Windows startup so Ctrl+Alt+Z is always available.
+    _register_startup()
 
     # OVER-05 proof: PMv2 survived Phase 2's Tk + ctypes imports.
     dpi.debug_print()

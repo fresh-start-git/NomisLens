@@ -14,12 +14,13 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation + DPI** - Project scaffold, AppState container, DPI awareness set as first line of main.py (completed 2026-04-11)
 - [x] **Phase 2: Overlay Window** - Shaped, draggable, click-through, non-focus-stealing empty bubble on screen (completed 2026-04-12)
-- [ ] **Phase 3: Capture Loop** - Live magnified pixels rendered inside the bubble at 30 fps with no memory leak
+- [x] **Phase 3: Capture Loop** - Live magnified pixels rendered inside the bubble at 30 fps with no memory leak (completed 2026-04-13)
 - [x] **Phase 4: Controls, Shape, Resize** - Zoom buttons, shape cycling, resize grip, touch-sized hit targets (completed 2026-04-13)
 - [x] **Phase 5: Config Persistence** - Position, size, zoom, shape saved to config.json and restored on launch (completed 2026-04-13)
-- [ ] **Phase 6: Global Hotkey** - Ctrl+Z (configurable) toggles bubble visibility even when Cornerstone has focus
-- [ ] **Phase 7: System Tray** - Tray icon with Show/Hide, Always-on-Top toggle, and Exit
-- [ ] **Phase 8: Build and Package** - Single portable .exe via PyInstaller, README, pushed to GitHub
+- [x] **Phase 6: Global Hotkey** - Ctrl+Alt+Z toggles bubble visibility even when Cornerstone has focus (completed 2026-04-16)
+- [ ] **Phase 7: DXGI Capture + Transparent Input** - Replace Magnification API with DXGI Desktop Duplication so all menus (Chrome, Win11 shell, Cornerstone) are captured; replace click injection with WS_EX_TRANSPARENT content zone so all input passes through naturally
+- [ ] **Phase 8: System Tray** - Tray icon with Show/Hide, Always-on-Top toggle, and Exit
+- [ ] **Phase 9: Build and Package** - Single portable .exe via PyInstaller, README, pushed to GitHub
 
 ## Phase Details
 
@@ -85,7 +86,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 5: Config Persistence
 **Goal**: Make the bubble remember where it was, how big it was, how zoomed in it was, and what shape it was the last time the user closed it, so every launch picks up exactly where the user left off.
-**Depends on**: Phase 4
+**Depends on**: Phase 5
 **Requirements**: PERS-01, PERS-02, PERS-03, PERS-04
 **Success Criteria** (what must be TRUE):
   1. After moving, resizing, zooming, and shape-cycling the bubble, a `config.json` file appears in the app's directory containing the new position, size, zoom, and shape
@@ -113,9 +114,27 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] 06-03-PLAN.md — Integration: add show/hide/toggle/attach_hotkey_manager to BubbleWindow + wire HotkeyManager into app.py main() (construct after attach_config_writer, before start_capture) + --no-hotkey CLI flag + AST lints in tests/test_main_entry.py (covers HOTK-01, HOTK-03, HOTK-04, HOTK-05) (completed 2026-04-14, see 06-03-SUMMARY.md)
 - [ ] 06-04-PLAN.md — Manual verification on Windows 11 dev box: CHECK 0 user decision (Ctrl+Z vs Ctrl+Alt+Z default vs Cornerstone undo conflict) + CHECK 1..5 manual pass/fail against all five Phase 6 Success Criteria (covers HOTK-02, HOTK-03, HOTK-04, HOTK-05 end-to-end)
 
-### Phase 7: System Tray
-**Goal**: Give the user a persistent tray icon that lets them show/hide the bubble, toggle always-on-top, and exit the app cleanly — the last user-facing integration before packaging.
+### Phase 7: DXGI Capture + Transparent Input
+**Goal**: Replace the Magnification API capture engine with DXGI Desktop Duplication so the zoom lens shows every window on screen regardless of Z-order — including Chrome context menus, Win11 WinUI3 shell menus, and Cornerstone #32768 menus — and replace all synthetic click injection with a WS_EX_TRANSPARENT content zone so the user's physical mouse and touch input fall through the lens to whatever app is underneath, with no coordinate math and no PostMessageW wiring.
 **Depends on**: Phase 6
+**Requirements**: CAPT-01, CAPT-02, CAPT-03, CAPT-04, CAPT-05, CAPT-06, CTRL-01
+**Success Criteria** (what must be TRUE):
+  1. Right-clicking in Cornerstone while the zoom lens covers the target area shows the Cornerstone context menu magnified inside the lens in real time
+  2. Right-clicking on the Windows 11 desktop while the zoom lens covers the area shows the WinUI3 desktop context menu magnified inside the lens
+  3. Right-clicking in Chrome while the zoom lens covers the area shows the Chrome context menu magnified inside the lens
+  4. Left-clicking a visible menu item in the lens (or anywhere in the content zone) delivers the click to the underlying app without any synthetic PostMessageW — verified by the correct action executing in the target app
+  5. The drag bar (top 44 px) remains draggable and the control strip (bottom 44 px) buttons remain functional after the WS_EX_TRANSPARENT zone management is wired in
+  6. The zoom lens does not show itself (no hall of mirrors) — WDA_EXCLUDEFROMCAPTURE continues to exclude the overlay from the DXGI capture
+  7. Capture sustains >= 30 fps on the clinic PC with no memory leak over a 10-minute session
+  8. All click-injection code (inject_click, inject_right_click, _poll_menu_restore, Z-order manipulation) is removed from the codebase
+**Plans**: 3 plans
+- [ ] 07-01-PLAN.md — New capture_dxgi.py module (DXGICaptureWorker) + test_capture_dxgi.py (14 structural tests) + tombstone test_capture.py + add dxcam==0.3.0 to requirements.txt (CAPT-01, CAPT-02, CAPT-03, CAPT-04)
+- [ ] 07-02-PLAN.md — window.py surgery: delete Mag API + click injection + menu poll; add _zone_transparency_poll + DXGICaptureWorker wiring; tombstone capture.py; clean app.py (CAPT-05, CAPT-06, CTRL-01)
+- [ ] 07-03-PLAN.md — clickthru.py trim (delete inject_click/inject_right_click/send_rclick_at, set _DEBUG_LOG=None) + naomi_zoom.spec dxcam hidden imports + test_clickthru.py cleanup + manual verification checkpoint (CAPT-01, CAPT-02, CAPT-03, CAPT-04, CAPT-05, CAPT-06, CTRL-01)
+
+### Phase 8: System Tray
+**Goal**: Give the user a persistent tray icon that lets them show/hide the bubble, toggle always-on-top, and exit the app cleanly — the last user-facing integration before packaging.
+**Depends on**: Phase 7
 **Requirements**: TRAY-01, TRAY-02, TRAY-03, TRAY-04, TRAY-05
 **Success Criteria** (what must be TRUE):
   1. Launching the app shows a custom tray icon in the Windows notification area
@@ -125,9 +144,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Exiting via the tray menu calls `icon.stop()` before `root.destroy()`, and the process terminates cleanly (no lingering threads or orphaned tray icons)
 **Plans**: TBD
 
-### Phase 8: Build and Package
+### Phase 9: Build and Package
 **Goal**: Produce a single portable .exe the non-technical clinic staff can double-click on a Windows 11 PC with no Python installed, documented in a plain-English README, and published to the project GitHub repo.
-**Depends on**: Phase 7
+**Depends on**: Phase 8
 **Requirements**: BULD-01, BULD-02, BULD-03, BULD-04, BULD-05, BULD-06
 **Success Criteria** (what must be TRUE):
   1. Running `build.bat` in a clean venv produces a single `.exe` with no external runtime dependencies
@@ -145,13 +164,14 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation + DPI | 3/3 | Complete | 2026-04-11 |
-| 2. Overlay Window | 3/3 | Complete   | 2026-04-12 |
-| 3. Capture Loop | 1/2 | In progress | - |
+| 2. Overlay Window | 3/3 | Complete | 2026-04-12 |
+| 3. Capture Loop | 2/2 | Complete | 2026-04-13 |
 | 4. Controls, Shape, Resize | 3/3 | Complete | 2026-04-13 |
 | 5. Config Persistence | 2/2 | Complete | 2026-04-13 |
-| 6. Global Hotkey | 0/4 | Not started | - |
-| 7. System Tray | 0/TBD | Not started | - |
-| 8. Build and Package | 0/TBD | Not started | - |
+| 6. Global Hotkey | 4/4 | Complete | 2026-04-16 |
+| 7. DXGI Capture + Transparent Input | 0/3 | Not started | - |
+| 8. System Tray | 0/TBD | Not started | - |
+| 9. Build and Package | 0/TBD | Not started | - |
 
 ## Coverage
 

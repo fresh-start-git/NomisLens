@@ -86,10 +86,16 @@ def test_dxgi_capture_worker_is_daemon():
 
 
 def test_stop_is_threading_event():
-    """worker._stop must be a threading.Event instance."""
+    """worker._stop_ev must be a threading.Event instance.
+
+    Named _stop_ev (not _stop) to avoid shadowing threading.Thread._stop()
+    which is called internally by join().  Shadowing it raises:
+      TypeError: 'Event' object is not callable
+    Same bug class as Phase 4's RLock→Lock fix (STATE.md Phase 01-foundation-dpi/02 decision).
+    """
     from magnifier_bubble import capture_dxgi
     worker = capture_dxgi.DXGICaptureWorker(_FakeState(), _fake_cb)
-    assert isinstance(worker._stop, threading.Event)
+    assert isinstance(worker._stop_ev, threading.Event)
 
 
 def test_get_fps_returns_zero_before_samples():

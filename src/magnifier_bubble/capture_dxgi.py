@@ -50,12 +50,15 @@ class DXGICaptureWorker(threading.Thread):
         self._state = state
         self._on_frame = on_frame
         self._target_dt = 1.0 / max(1.0, target_fps * 1.05)
-        self._stop = threading.Event()
+        # NOTE: named _stop_ev (not _stop) to avoid shadowing threading.Thread._stop()
+        # which is called internally by join().  Shadowing it converts _stop() calls
+        # into Event method calls, raising TypeError: 'Event' object is not callable.
+        self._stop_ev = threading.Event()
         self._fps_samples: deque[float] = deque(maxlen=60)
 
     def stop(self) -> None:
         """Signal the worker to exit its frame loop."""
-        self._stop.set()
+        self._stop_ev.set()
 
     def get_fps(self) -> float:
         """Return the rolling 60-frame average FPS, or 0.0 if < 2 samples."""
@@ -87,11 +90,11 @@ class DXGICaptureWorker(threading.Thread):
                 print(f"[dxcam] create failed: {exc}", flush=True)
                 return
 
-            while not self._stop.is_set():
+            while not self._stop_ev.is_set():
                 t0 = time.perf_counter()
                 x, y, w, h, zoom = self._state.capture_region()
                 if w <= 0 or h <= 0:
-                    self._stop.wait(self._target_dt)
+                    self._stop_ev.wait(self._target_dt)
                     continue
                 src_w = max(1, int(round(w / zoom)))
                 src_h = max(1, int(round(h / zoom)))
@@ -106,7 +109,7 @@ class DXGICaptureWorker(threading.Thread):
                     # No new frame (screen unchanged) — skip this tick
                     remaining = self._target_dt - (time.perf_counter() - t0)
                     if remaining > 0:
-                        self._stop.wait(remaining)
+                        self._stop_ev.wait(remaining)
                     continue
                 # frame is already RGB (H, W, 3) — fromarray works directly
                 img = Image.fromarray(frame)
@@ -115,7 +118,7 @@ class DXGICaptureWorker(threading.Thread):
                 self._fps_samples.append(time.perf_counter())
                 remaining = self._target_dt - (time.perf_counter() - t0)
                 if remaining > 0:
-                    self._stop.wait(remaining)
+                    self._stop_ev.wait(remaining)
         finally:
             _winmm.timeEndPeriod(1)
             if camera is not None:

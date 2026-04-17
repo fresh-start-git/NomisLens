@@ -1,6 +1,7 @@
 # Ultimate Zoom — pinned runtime + build deps for Python 3.11.9 on Windows 11
 # Installed by: pip install -r requirements.txt
 mss==10.1.0
+dxcam==0.3.0
 pywin32==311
 Pillow==12.1.1
 numpy==2.2.6

@@ -169,7 +169,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Controls, Shape, Resize | 3/3 | Complete | 2026-04-13 |
 | 5. Config Persistence | 2/2 | Complete | 2026-04-13 |
 | 6. Global Hotkey | 4/4 | Complete | 2026-04-16 |
-| 7. DXGI Capture + Transparent Input | 0/3 | Not started | - |
+| 7. DXGI Capture + Transparent Input | 1/3 | In Progress|  |
 | 8. System Tray | 0/TBD | Not started | - |
 | 9. Build and Package | 0/TBD | Not started | - |
 

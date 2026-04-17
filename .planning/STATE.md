@@ -3,12 +3,27 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Completed 06-03-PLAN.md (Hotkey app wiring: BubbleWindow.show/hide/toggle + attach_hotkey_manager duck-typed symmetric with attach_config_writer; destroy()-chain hotkey.stop() between config flush and capture stop; app.py main() HotkeyManager construction after attach_config_writer + before start_capture with bubble.toggle as main-thread callback; raw json re-read for parse_hotkey because config.load drops unknown fields; --no-hotkey argparse flag escape hatch for clinic keyboard-hook conflicts; 6 new test_main_entry.py AST + subprocess lints + 1 filled test_window_phase4.py show/hide/toggle stub; zero deviations; 253 passed 5/5 runs vs 247 baseline = net +6 tests, no regressions; manual Windows smoke — `[hotkey] registered modifiers=0x0002 vk=0x5a tid=<DWORD>` emitted on default launch, `[hotkey] disabled by --no-hotkey flag` on --no-hotkey)"
-last_updated: "2026-04-14T13:05:22.254Z"
+stopped_at: "Completed 07-01-PLAN.md (DXGICaptureWorker dxcam capture: new module capture_dxgi.py replacing CaptureWorker mss; 14 structural tests + 2 Windows smoke tests; dxcam==0.3.0 pinned; 3 Rule 1 auto-fixes: docstring cv2 literal, _stop_ev shadow fix, smoke test mouse movement; 16 new tests pass, 271 passing full suite)"
+last_updated: "2026-04-17T23:50:26.413Z"
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 5
-  total_plans: 17
+  total_plans: 20
+  completed_plans: 17
+  percent: 85
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: unknown
+stopped_at: "Completed 06-03-PLAN.md (Hotkey app wiring: BubbleWindow.show/hide/toggle + attach_hotkey_manager duck-typed symmetric with attach_config_writer; destroy()-chain hotkey.stop() between config flush and capture stop; app.py main() HotkeyManager construction after attach_config_writer + before start_capture with bubble.toggle as main-thread callback; raw json re-read for parse_hotkey because config.load drops unknown fields; --no-hotkey argparse flag escape hatch for clinic keyboard-hook conflicts; 6 new test_main_entry.py AST + subprocess lints + 1 filled test_window_phase4.py show/hide/toggle stub; zero deviations; 253 passed 5/5 runs vs 247 baseline = net +6 tests, no regressions; manual Windows smoke — `[hotkey] registered modifiers=0x0002 vk=0x5a tid=<DWORD>` emitted on default launch, `[hotkey] disabled by --no-hotkey flag` on --no-hotkey)"
+last_updated: "2026-04-17T23:29:30.930Z"
+progress:
+  [█████████░] 85%
+  completed_phases: 5
+  total_plans: 20
   completed_plans: 16
 ---
 
@@ -19,12 +34,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Clicks and touches pass through the magnified content area to whatever app is underneath — the bubble enhances vision without blocking the workflow.
-**Current focus:** Phase 06 — global-hotkey
+**Current focus:** Phase 07 — dxgi-capture-transparent-input
 
 ## Current Position
 
-Phase: 06 (global-hotkey) — EXECUTING
-Plan: 4 of 4
+Phase: 07 (dxgi-capture-transparent-input) — EXECUTING
+Plan: 1 of 3
 
 ## Performance Metrics
 
@@ -71,6 +86,7 @@ Plan: 4 of 4
 | Phase 06 P01 | 5 min | 4 tasks | 7 files |
 | Phase 06 P02 | ~48 min | 3 tasks (2 auto-fixed Rule 1 bugs) | 5 files |
 | Phase 06 P03 | ~7 min | 2 tasks (zero deviations) | 4 files |
+| Phase 07 P01 | 19 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -161,6 +177,8 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 06-global-hotkey/03]: Hotkey wiring is a three-way branch: `if args.no_hotkey: print([hotkey] disabled) / elif sys.platform == 'win32': construct + start + attach / else: print([hotkey] skipped)`. The non-Windows `else` emits a `[hotkey]` line so test_main_py_default_smoke_contains_hotkey_line passes on both platforms with a single assertion (`"[hotkey]" in stdout`).
 - [Phase 06]: [Phase 06-global-hotkey/03]: test_bubble_show_hide_toggle uses the existing module-scoped phase4_bubble fixture (NOT a fresh BubbleWindow as the plan's OPTION A suggested). tk.Tk() churn triggers Python 3.11+/tk 8.6 init.tcl flake (STATE.md Phase 02/02 decisions). Finally block restores state.set_visible(True) + root.deiconify so downstream tests in the module see a known-visible baseline.
 - [Phase 06]: [Phase 06-global-hotkey/03]: Phase 6 functional complete — Ctrl+Z (default) toggles bubble end-to-end on Windows dev box; `[hotkey] registered modifiers=0x0002 vk=0x5a tid=<DWORD>` emitted on launch. 5/5 full-suite runs green (253 passed, +6 from Plan 06-03). Plan 06-04 manual verification remains.
+- [Phase 07-01]: DXGICaptureWorker uses _stop_ev (not _stop) for stop Event to avoid shadowing threading.Thread._stop() internal method in Python 3.11 — prevents join() TypeError
+- [Phase 07-01]: Smoke tests that depend on dxcam new_frame_only=True must generate screen activity via SetCursorPos mouse movement — on a static screen new_frame_only=True returns None so no frames are captured
 
 ### Pending Todos
 
@@ -180,8 +198,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-14T04:52:12Z
-Stopped at: Completed 06-03-PLAN.md (Hotkey app wiring: BubbleWindow.show/hide/toggle + attach_hotkey_manager duck-typed symmetric with attach_config_writer; destroy()-chain hotkey.stop() between config flush and capture stop; app.py main() HotkeyManager construction after attach_config_writer + before start_capture with bubble.toggle as main-thread callback; raw json re-read for parse_hotkey because config.load drops unknown fields; --no-hotkey argparse flag escape hatch for clinic keyboard-hook conflicts; 6 new test_main_entry.py AST + subprocess lints + 1 filled test_window_phase4.py show/hide/toggle stub; zero deviations; 253 passed 5/5 runs vs 247 baseline = net +6 tests, no regressions; manual Windows smoke — `[hotkey] registered modifiers=0x0002 vk=0x5a tid=<DWORD>` emitted on default launch, `[hotkey] disabled by --no-hotkey flag` on --no-hotkey)
+Last session: 2026-04-17T23:50:26.405Z
+Stopped at: Completed 07-01-PLAN.md (DXGICaptureWorker dxcam capture: new module capture_dxgi.py replacing CaptureWorker mss; 14 structural tests + 2 Windows smoke tests; dxcam==0.3.0 pinned; 3 Rule 1 auto-fixes: docstring cv2 literal, _stop_ev shadow fix, smoke test mouse movement; 16 new tests pass, 271 passing full suite)
 Resume file: None
 
 Next step: `/gsd:execute-plan 06-04` (manual verification checkpoint on the real dev box — press the configured hotkey, see the bubble toggle, confirm no collision with Cornerstone undo; if collision observed, switch default to Ctrl+Alt+Z in config.py _HOTKEY_DEFAULT and update VALIDATION.md). ALSO STILL OPEN: two UX gaps from Phase 05 verification — (a) no on-bubble close button (Phase 7 tray or small fix-up plan); (b) click-through not actually working in real use despite Phase 04-03 inject_click (proposed Phase 04-04 diagnostic plan). Pre-existing test failures in test_capture_smoke.py + test_window_integration.py + test_window_config_integration.py (TypeError 'Event' object not callable, 6 failed + 4 errors) tracked in .planning/phases/06-global-hotkey/deferred-items.md — also a Phase 04-04 candidate.

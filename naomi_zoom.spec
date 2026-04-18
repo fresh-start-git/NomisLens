@@ -74,6 +74,7 @@ exe = EXE(
     a.datas,
     [],
     name='NomisLens',
+    icon='assets/app_icon.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

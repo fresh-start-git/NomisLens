@@ -26,8 +26,7 @@ ZOOM_STEP: float = 0.25
 
 # CTRL-08 resize range.
 MIN_SIZE: int = 150
-MAX_SIZE: int = 700   # max height
-MAX_WIDTH: int = 1200  # max width — wider horizontal expansion allowed
+MAX_SIZE: int = 700   # max for both width and height (state spec: 150–700)
 
 # CTRL-02 shape cycle state machine: circle -> rounded -> rect -> circle.
 SHAPE_CYCLE: dict[str, str] = {
@@ -89,6 +88,6 @@ def zoom_step(z: float, direction: int) -> float:
 
 def resize_clamp(w: int, h: int) -> tuple[int, int]:
     return (
-        max(MIN_SIZE, min(MAX_WIDTH, w)),
+        max(MIN_SIZE, min(MAX_SIZE, w)),
         max(MIN_SIZE, min(MAX_SIZE, h)),
     )

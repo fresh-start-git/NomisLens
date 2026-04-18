@@ -101,7 +101,7 @@ def test_button_rects_all_inside_window_at_700():
 
 
 def test_button_rects_names_unique():
-    assert {b.name for b in layout_controls(400, 400)} == {"shape", "zoom_out", "zoom_in", "resize"}
+    assert {b.name for b in layout_controls(400, 400)} == {"close", "shape", "zoom_out", "zoom_in", "resize"}
 
 
 def test_button_rects_shape_in_top_strip():

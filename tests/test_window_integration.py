@@ -328,8 +328,12 @@ def test_canvas_compute_zone_center_is_content(bubble):
 
 
 @win_only
-def test_wndproc_hit_test_returns_httransparent_at_center(bubble):
-    """End-to-end: send WM_NCHITTEST at window center, expect HTTRANSPARENT."""
+def test_wndproc_hit_test_returns_htclient_at_center(bubble):
+    """Phase 7: WM_NCHITTEST at window center returns HTCLIENT.
+
+    Content zone click-through moved to WS_EX_TRANSPARENT on the HWND.
+    The WndProc no longer returns HTTRANSPARENT (cross-process silent-consume).
+    """
     u32 = ctypes.windll.user32
     u32.SendMessageW.argtypes = [
         ctypes.wintypes.HWND, ctypes.wintypes.UINT,
@@ -342,8 +346,8 @@ def test_wndproc_hit_test_returns_httransparent_at_center(bubble):
     sy = snap.y + snap.h // 2
     lparam = (sx & 0xFFFF) | ((sy & 0xFFFF) << 16)
     result = u32.SendMessageW(bubble._hwnd, wc.WM_NCHITTEST, 0, lparam)
-    assert result == wc.HTTRANSPARENT, (
-        f"expected HTTRANSPARENT ({wc.HTTRANSPARENT}) at window center, got {result}"
+    assert result == wc.HTCLIENT, (
+        f"expected HTCLIENT ({wc.HTCLIENT}) at window center, got {result}"
     )
 
 

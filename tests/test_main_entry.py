@@ -68,24 +68,24 @@ def test_main_py_exists():
     assert MAIN_PY.is_file(), f"main.py not found at {MAIN_PY}"
 
 
-def test_main_py_first_line_is_import_ctypes():
+def test_main_py_first_line_is_import_sys():
+    """main.py must start with 'import sys' for stdout/stderr reconfigure."""
     with MAIN_PY.open("rb") as f:
         first_line = f.readline().decode("utf-8").rstrip("\r\n")
-    assert first_line == "import ctypes", (
-        f"main.py line 1 must be 'import ctypes' (OVER-05); got: {first_line!r}"
+    assert first_line == "import sys", (
+        f"main.py line 1 must be 'import sys' (encoding setup); got: {first_line!r}"
     )
 
 
 def test_main_py_has_no_module_docstring():
-    """OVER-05 is unambiguous iff there is no docstring above `import ctypes`."""
+    """OVER-05: file must start with an import statement, not a docstring."""
     source = MAIN_PY.read_text(encoding="utf-8")
     tree = ast.parse(source)
     assert len(tree.body) >= 1
     first = tree.body[0]
     assert isinstance(first, ast.Import), (
-        f"main.py body[0] should be `import ctypes`; got {type(first).__name__}"
+        f"main.py body[0] should be an import statement; got {type(first).__name__}"
     )
-    assert first.names[0].name == "ctypes"
 
 
 def test_main_py_dpi_call_is_present_and_targets_pmv2():

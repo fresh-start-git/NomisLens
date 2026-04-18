@@ -139,11 +139,10 @@ def phase4_bubble():
 
 @win_only
 def test_grip_glyph_drawn_centered(phase4_bubble):
-    """CTRL-01: the grip glyph (U+2261) sits in the top strip, centered
-    left-of-center (the shape button occupies the rightmost 44 px).
+    """CTRL-01: the grip glyph (U+2261) sits in the top strip, centered.
 
     For a 400x400 bubble:
-      grip_cx = (400 - 44) // 2 = 178
+      grip_cx = 400 // 2 = 200
       grip_cy = DRAG_STRIP_HEIGHT // 2 = 22
     """
     from magnifier_bubble.window import DRAG_STRIP_HEIGHT
@@ -155,7 +154,7 @@ def test_grip_glyph_drawn_centered(phase4_bubble):
     coords = bubble._canvas.coords(grip_id)
     assert len(coords) == 2, f"grip coords len: {len(coords)}"
     grip_cx, grip_cy = coords
-    expected_cx = (400 - 44) // 2
+    expected_cx = 400 // 2
     expected_cy = DRAG_STRIP_HEIGHT // 2
     assert abs(grip_cx - expected_cx) <= 1, (
         f"grip x: got {grip_cx}, expected {expected_cx}±1"
@@ -175,10 +174,11 @@ def test_zoom_buttons_and_text_display(phase4_bubble):
     state.set_zoom(2.0)
     bubble.root.update_idletasks()
     text = bubble._canvas.itemcget(bubble._zoom_text_id, "text")
-    assert re.match(r"^\d+\.\d{2}x$", text), (
-        f"zoom text {text!r} does not match ^\\d+\\.\\d{{2}}x$"
+    # Format: N.Nx× (1 decimal place, U+00D7 multiplication sign)
+    assert re.match(r"^\d+\.\d{1}\u00d7$", text), (
+        f"zoom text {text!r} does not match ^\\d+\\.\\d{{1}}×$"
     )
-    assert text == "2.00x", f"expected 2.00x, got {text!r}"
+    assert text == "2.0\u00d7", f"expected '2.0×', got {text!r}"
     zoom_out_text = bubble._canvas.itemcget(bubble._zoom_out_text_id, "text")
     zoom_in_text = bubble._canvas.itemcget(bubble._zoom_in_text_id, "text")
     assert zoom_out_text == "\u2212", f"zoom-out glyph: {zoom_out_text!r}"

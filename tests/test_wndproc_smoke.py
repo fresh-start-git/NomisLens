@@ -150,8 +150,13 @@ def test_wndproc_returns_htcaption_for_drag_zone(tk_toplevel):
 
 
 @win_only
-def test_wndproc_returns_httransparent_for_middle(tk_toplevel):
-    """Synthetic WM_NCHITTEST at window center -> zone='content' -> HTTRANSPARENT."""
+def test_wndproc_returns_htclient_for_content(tk_toplevel):
+    """Phase 7: WM_NCHITTEST content zone -> HTCLIENT (delegates to default proc).
+
+    HTTRANSPARENT was dropped from the WndProc — it only propagates same-thread
+    and silently consumed cross-process clicks (Cornerstone). Phase 7 uses
+    WS_EX_TRANSPARENT on the HWND instead for OS-level click-through.
+    """
     top, hwnd = tk_toplevel
     ka = wndproc.install(hwnd, lambda cx, cy, w, h: "content")
     try:
@@ -163,8 +168,8 @@ def test_wndproc_returns_httransparent_for_middle(tk_toplevel):
         u32.SendMessageW.restype = ctypes.c_ssize_t
         lparam = _pack_lparam_screen_point(400, 400)  # center
         result = u32.SendMessageW(hwnd, wc.WM_NCHITTEST, 0, lparam)
-        assert result == wc.HTTRANSPARENT, (
-            f"expected HTTRANSPARENT ({wc.HTTRANSPARENT}) for content zone, got {result}"
+        assert result == wc.HTCLIENT, (
+            f"expected HTCLIENT ({wc.HTCLIENT}) for content zone, got {result}"
         )
     finally:
         wndproc.uninstall(ka)

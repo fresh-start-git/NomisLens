@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-stopped_at: "Completed 07-03-PLAN.md (clickthru.py cleanup: deleted inject_click/inject_right_click/send_rclick_at, set _DEBUG_LOG=None, updated naomi_zoom.spec with dxcam hiddenimports, updated test_clickthru.py with 4 Phase 7 deletion tests; awaiting human verification checkpoint)"
-last_updated: "2026-04-18T00:16:24.649Z"
+status: executing
+stopped_at: "Phase 07 complete — DXGI capture, WS_EX_TRANSPARENT zone poll, edge-of-screen clamp, menu Z-order fix, menu item click injection, test drift fixes (9 tests), EXE built (28 MB). 230/230 pure-Python tests pass. Next: Phase 08 system tray or deferred multi-monitor support."
+last_updated: "2026-04-17T22:30:00Z"
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 20
-  completed_plans: 19
-  percent: 85
+  completed_plans: 20
+  percent: 94
 ---
 
 ---
@@ -34,12 +34,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Clicks and touches pass through the magnified content area to whatever app is underneath — the bubble enhances vision without blocking the workflow.
-**Current focus:** Phase 07 — dxgi-capture-transparent-input
+**Current focus:** Phase 08 — system-tray (next)
 
 ## Current Position
 
-Phase: 07 (dxgi-capture-transparent-input) — EXECUTING
-Plan: 1 of 3
+Phase: 07 (dxgi-capture-transparent-input) — COMPLETE
+Phase: 08 (system-tray) — NOT STARTED
 
 ## Performance Metrics
 
@@ -205,8 +205,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-18T00:16:24.642Z
-Stopped at: Completed 07-03-PLAN.md (clickthru.py cleanup: deleted inject_click/inject_right_click/send_rclick_at, set _DEBUG_LOG=None, updated naomi_zoom.spec with dxcam hiddenimports, updated test_clickthru.py with 4 Phase 7 deletion tests; awaiting human verification checkpoint)
+Last session: 2026-04-17T22:30:00Z
+Stopped at: Phase 07 fully complete — all 3 plans executed, 9 test drift failures fixed, dist/NomisLens.exe built (28 MB), 07-VERIFICATION.md written. 230/230 pure-Python tests pass. EXE smoke test exits 0.
 Resume file: None
 
-Next step: `/gsd:execute-plan 06-04` (manual verification checkpoint on the real dev box — press the configured hotkey, see the bubble toggle, confirm no collision with Cornerstone undo; if collision observed, switch default to Ctrl+Alt+Z in config.py _HOTKEY_DEFAULT and update VALIDATION.md). ALSO STILL OPEN: two UX gaps from Phase 05 verification — (a) no on-bubble close button (Phase 7 tray or small fix-up plan); (b) click-through not actually working in real use despite Phase 04-03 inject_click (proposed Phase 04-04 diagnostic plan). Pre-existing test failures in test_capture_smoke.py + test_window_integration.py + test_window_config_integration.py (TypeError 'Event' object not callable, 6 failed + 4 errors) tracked in .planning/phases/06-global-hotkey/deferred-items.md — also a Phase 04-04 candidate.
+Next step: `/gsd:plan-phase 08` (system tray — tray icon, Show/Hide menu item, right-click tray menu). Multi-monitor support deferred per user decision 2026-04-17. OPEN: close button on bubble (overlay dismissable without tray). Tk init.tcl path errors in bash shell are a pre-existing env artifact (not test failures); EXE and normal Windows launch unaffected.

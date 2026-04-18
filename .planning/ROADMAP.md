@@ -153,15 +153,17 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Success Criteria** (what must be TRUE):
   1. Running `build.bat` in a clean venv produces a single `.exe` with no external runtime dependencies
   2. The `.spec` file is committed, includes `hiddenimports=['pystray._win32', 'PIL._tkinter_finder', 'win32timezone']`, and sets `upx=False`
-  3. The resulting `.exe` launches on a Windows 11 machine with no Python installed and exercises all Phase 1–7 success criteria end-to-end
+  3. The resulting `.exe` launches on a Windows 11 machine with no Python installed and exercises all Phase 1–8 success criteria end-to-end
   4. A `README.md` walks a non-technical user step-by-step through installing Python, installing dependencies, running from source, and running the `.exe`, including an AV allowlist note
-  5. The full source tree, `.spec`, `build.bat`, and `README.md` are pushed to `https://github.com/fresh-start-git/Ultimate-Zoom.git`
-**Plans**: TBD
+  5. The full source tree, `.spec`, `build.bat`, and `README.md` are pushed to the GitHub repo (live remote: https://github.com/fresh-start-git/NomisLens.git — note: REQUIREMENTS.md says Ultimate-Zoom.git but live remote is NomisLens.git; human verification step confirms the correct URL before push)
+**Plans**: 2 plans
+- [ ] 09-01-PLAN.md — Automated artifacts: tests/test_build.py structural lints (Wave 0) + spec hiddenimport surgery (PIL._tkinter_finder, win32timezone) + build.bat + README.md + .gitignore hardening (zoom_log.txt, .claude/, .remember/, theme.json) (BULD-01, BULD-02, BULD-03, BULD-05)
+- [ ] 09-02-PLAN.md — Human verification: rebuild EXE via build.bat + ULTIMATE_ZOOM_SMOKE=1 smoke test + confirm GitHub remote URL + git push origin master (BULD-04, BULD-06)
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -173,7 +175,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 6. Global Hotkey | 4/4 | Complete | 2026-04-16 |
 | 7. DXGI Capture + Transparent Input | 3/3 | Complete   | 2026-04-18 |
 | 8. System Tray | 2/2 | Complete | 2026-04-17 |
-| 9. Build and Package | 0/TBD | Not started | - |
+| 9. Build and Package | 0/2 | Not started | - |
 
 ## Coverage
 
@@ -190,7 +192,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | HOTK | 5 | Phase 6 |
 | TRAY | 5 | Phase 7 |
 | PERS | 4 | Phase 5 |
-| BULD | 6 | Phase 8 |
+| BULD | 6 | Phase 9 |
 
 ## Research Flags
 

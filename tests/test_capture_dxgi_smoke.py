@@ -41,8 +41,16 @@ class _FakeState:
         return (100, 100, 400, 400, 2.0)
 
 
-def _make_worker(frames_list, stop_event):
-    """Return a DXGICaptureWorker that appends frames to frames_list."""
+def _make_worker(frames_list, stop_event, new_frame_only=False):
+    """Return a DXGICaptureWorker that appends frames to frames_list.
+
+    new_frame_only=False used for fps smoke test: on a static desktop,
+    new_frame_only=True returns None because DXGI Desktop Duplication only
+    reports 'new' frames on actual framebuffer changes (cursor movement does
+    NOT trigger framebuffer updates — the cursor is composited as a hardware
+    overlay).  new_frame_only=False returns the last captured frame on every
+    call, giving reliable fps measurement in any display state.
+    """
     from magnifier_bubble.capture_dxgi import DXGICaptureWorker
 
     def _on_frame(img):
@@ -50,54 +58,32 @@ def _make_worker(frames_list, stop_event):
         if len(frames_list) >= 60:
             stop_event.set()
 
-    worker = DXGICaptureWorker(_FakeState(), _on_frame)
+    worker = DXGICaptureWorker(_FakeState(), _on_frame, new_frame_only=new_frame_only)
     return worker
-
-
-def _move_mouse_loop(stop_event: threading.Event) -> None:
-    """Move mouse back and forth to trigger new frames from DXGI.
-
-    DXGICaptureWorker uses grab(new_frame_only=True) which only returns
-    frames when the desktop compositor marks the swapchain as updated.
-    On a static screen this rarely triggers. Moving the cursor causes the
-    cursor layer to composite, marking the frame as new.
-    """
-    u32 = ctypes.windll.user32
-    pt = ctypes.wintypes.POINT()
-    u32.GetCursorPos(ctypes.byref(pt))
-    ox, oy = pt.x, pt.y
-    dx = 0
-    while not stop_event.is_set():
-        u32.SetCursorPos(ox + dx, oy)
-        dx = 5 if dx == 0 else 0
-        stop_event.wait(0.016)  # ~60 moves/sec
-    u32.SetCursorPos(ox, oy)  # restore original position
 
 
 def test_achieves_30fps():
     """CAPT-02: DXGICaptureWorker achieves >= 25 fps over a 5-second window.
 
     25 fps threshold (not 30) accounts for test environment scheduling overhead.
-    The worker targets 30 fps; in a real display session it should comfortably
-    exceed 25 fps even under load.
+    The worker targets 30 fps via the timeBeginPeriod(1) + sleep loop; 60
+    collected frames should arrive in ~2 seconds at 30 fps.
 
-    Mouse movement is used to ensure DXGI marks frames as new (new_frame_only=True
-    returns None on a static screen since no swapchain update occurs).
+    Uses new_frame_only=False to bypass DXGI frame deduplication: on a static
+    desktop, new_frame_only=True returns None (no framebuffer change) and the
+    fps counter never increments.  new_frame_only=False returns the last captured
+    frame on every call, correctly measuring the thread's loop throughput.
     """
     frames = []
     stop_event = threading.Event()
-    worker = _make_worker(frames, stop_event)
-
-    # Start mouse mover to generate screen activity
-    mouse_thread = threading.Thread(target=_move_mouse_loop, args=(stop_event,), daemon=True)
-    mouse_thread.start()
+    # new_frame_only=False: measure loop throughput, not display update rate
+    worker = _make_worker(frames, stop_event, new_frame_only=False)
 
     worker.start()
     try:
-        # Allow up to 5 seconds for 60 frames to arrive (needed for fps calculation)
+        # Allow up to 5 seconds for 60 frames (expected ~2 s at 30 fps)
         stop_event.wait(timeout=5.0)
     finally:
-        stop_event.set()  # stop mouse mover too
         worker.stop()
         worker.join(timeout=3.0)
 

@@ -45,11 +45,13 @@ class DXGICaptureWorker(threading.Thread):
         state: "AppState",
         on_frame: FrameCallback,
         target_fps: float = 30.0,
+        new_frame_only: bool = True,
     ) -> None:
         super().__init__(daemon=True, name="magnifier-dxgi-capture")
         self._state = state
         self._on_frame = on_frame
         self._target_dt = 1.0 / max(1.0, target_fps * 1.05)
+        self._new_frame_only = new_frame_only
         # NOTE: named _stop_ev (not _stop) to avoid shadowing threading.Thread._stop()
         # which is called internally by join().  Shadowing it converts _stop() calls
         # into Event method calls, raising TypeError: 'Event' object is not callable.
@@ -103,7 +105,7 @@ class DXGICaptureWorker(threading.Thread):
                 # region format: (left, top, right, bottom) — NOT width/height
                 frame = camera.grab(
                     region=(src_x, src_y, src_x + src_w, src_y + src_h),
-                    new_frame_only=True,
+                    new_frame_only=self._new_frame_only,
                 )
                 if frame is None:
                     # No new frame (screen unchanged) — skip this tick

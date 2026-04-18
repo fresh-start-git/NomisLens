@@ -235,19 +235,53 @@ class DXGICaptureWorker(threading.Thread):
                 adj_x = src_x - mon_left
                 adj_y = src_y - mon_top
 
-                # region format: (left, top, right, bottom) in per-output coords
-                frame = camera.grab(
-                    region=(adj_x, adj_y, adj_x + src_w, adj_y + src_h),
-                    new_frame_only=self._new_frame_only,
-                )
+                # Clamp region to valid per-output bounds (0,0)..(mon_w,mon_h).
+                # The overlay can extend past a screen edge; an out-of-bounds
+                # grab raises an exception that kills the worker thread (freeze).
+                mon_w = monitors[output_idx][2] - monitors[output_idx][0]
+                mon_h = monitors[output_idx][3] - monitors[output_idx][1]
+                r_left = max(0, adj_x)
+                r_top = max(0, adj_y)
+                r_right = min(mon_w, adj_x + src_w)
+                r_bottom = min(mon_h, adj_y + src_h)
+
+                if r_left >= r_right or r_top >= r_bottom:
+                    # Entire source region is off-screen — skip frame
+                    remaining = self._target_dt - (time.perf_counter() - t0)
+                    if remaining > 0:
+                        self._stop_ev.wait(remaining)
+                    continue
+
+                try:
+                    frame = camera.grab(
+                        region=(r_left, r_top, r_right, r_bottom),
+                        new_frame_only=self._new_frame_only,
+                    )
+                except Exception as exc:
+                    print(f"[dxcam] grab error: {exc}", flush=True)
+                    remaining = self._target_dt - (time.perf_counter() - t0)
+                    if remaining > 0:
+                        self._stop_ev.wait(remaining)
+                    continue
+
                 if frame is None:
                     # No new frame (screen unchanged) — skip this tick
                     remaining = self._target_dt - (time.perf_counter() - t0)
                     if remaining > 0:
                         self._stop_ev.wait(remaining)
                     continue
+
                 # frame is already RGB (H, W, 3) — fromarray works directly
                 img = Image.fromarray(frame)
+
+                # If the region was clamped (overlay partially off-screen), embed
+                # the grabbed pixels in a black src-sized canvas so the resize is
+                # not distorted — off-screen pixels appear black.
+                if r_left != adj_x or r_top != adj_y or r_right != adj_x + src_w or r_bottom != adj_y + src_h:
+                    canvas_img = Image.new("RGB", (src_w, src_h), (0, 0, 0))
+                    canvas_img.paste(img, (r_left - adj_x, r_top - adj_y))
+                    img = canvas_img
+
                 img = img.resize((w, h), Image.BILINEAR)
                 self._on_frame(img)
                 self._fps_samples.append(time.perf_counter())

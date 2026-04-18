@@ -19,7 +19,7 @@
 - [x] **CAPT-02**: Capture runs at 30 fps minimum (33 ms/frame budget)
 - [x] **CAPT-03**: PIL.ImageGrab is NOT used in the main capture loop (mss only)
 - [x] **CAPT-04**: Captured pixels are magnified using Pillow BILINEAR resampling and rendered inside the bubble
-- [ ] **CAPT-05**: Per-frame rendering reuses a single ImageTk.PhotoImage via paste() to avoid Windows memory leak (CPython issue 124364)
+- [x] **CAPT-05**: Per-frame rendering reuses a single ImageTk.PhotoImage via paste() to avoid Windows memory leak (CPython issue 124364)
 - [x] **CAPT-06**: Capture correctly handles the bubble's own screen position (no hall-of-mirrors; WS_EX_LAYERED excludes the window from BitBlt by default)
 
 ### Layout
@@ -118,7 +118,7 @@
 | CAPT-02 | Phase 3 | Complete |
 | CAPT-03 | Phase 3 | Complete |
 | CAPT-04 | Phase 3 | Complete |
-| CAPT-05 | Phase 3 | Pending |
+| CAPT-05 | Phase 3 | Complete |
 | CAPT-06 | Phase 3 | Complete |
 | LAYT-01 | Phase 2 | Complete |
 | LAYT-02 | Phase 2 | Complete |

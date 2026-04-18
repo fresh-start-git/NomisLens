@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Completed 07-01-PLAN.md (DXGICaptureWorker dxcam capture: new module capture_dxgi.py replacing CaptureWorker mss; 14 structural tests + 2 Windows smoke tests; dxcam==0.3.0 pinned; 3 Rule 1 auto-fixes: docstring cv2 literal, _stop_ev shadow fix, smoke test mouse movement; 16 new tests pass, 271 passing full suite)"
-last_updated: "2026-04-17T23:50:26.413Z"
+stopped_at: "Completed 07-02-PLAN.md (window.py surgery: removed ~500 lines Mag API + click injection, added 30-line WS_EX_TRANSPARENT zone poll + DXGICaptureWorker wiring; capture.py tombstoned; 6 files updated; all pre-existing failures confirmed pre-existing via stash verify)"
+last_updated: "2026-04-18T00:04:42.191Z"
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 20
-  completed_plans: 17
+  completed_plans: 18
   percent: 85
 ---
 
@@ -87,6 +87,7 @@ Plan: 1 of 3
 | Phase 06 P02 | ~48 min | 3 tasks (2 auto-fixed Rule 1 bugs) | 5 files |
 | Phase 06 P03 | ~7 min | 2 tasks (zero deviations) | 4 files |
 | Phase 07 P01 | 19 | 3 tasks | 6 files |
+| Phase 07 P02 | 95 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -179,6 +180,9 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 06-global-hotkey/03]: Phase 6 functional complete — Ctrl+Z (default) toggles bubble end-to-end on Windows dev box; `[hotkey] registered modifiers=0x0002 vk=0x5a tid=<DWORD>` emitted on launch. 5/5 full-suite runs green (253 passed, +6 from Plan 06-03). Plan 06-04 manual verification remains.
 - [Phase 07-01]: DXGICaptureWorker uses _stop_ev (not _stop) for stop Event to avoid shadowing threading.Thread._stop() internal method in Python 3.11 — prevents join() TypeError
 - [Phase 07-01]: Smoke tests that depend on dxcam new_frame_only=True must generate screen activity via SetCursorPos mouse movement — on a static screen new_frame_only=True returns None so no frames are captured
+- [Phase 07-02]: Zone poll replaces all click injection: _zone_transparency_poll sets WS_EX_TRANSPARENT when cursor enters content zone — no SendInput, PostMessageW, or ReleaseCapture needed
+- [Phase 07-02]: capture.py tombstoned with raise ImportError (not deleted) — preserves git history while blocking accidental CaptureWorker import
+- [Phase 07-02]: Both after-IDs (_zone_poll_id, _poll_frame_queue_id) stored and after_cancel'd in destroy() before root.destroy() — prevents Tk callbacks on partially torn-down tree
 
 ### Pending Todos
 
@@ -198,8 +202,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-17T23:50:26.405Z
-Stopped at: Completed 07-01-PLAN.md (DXGICaptureWorker dxcam capture: new module capture_dxgi.py replacing CaptureWorker mss; 14 structural tests + 2 Windows smoke tests; dxcam==0.3.0 pinned; 3 Rule 1 auto-fixes: docstring cv2 literal, _stop_ev shadow fix, smoke test mouse movement; 16 new tests pass, 271 passing full suite)
+Last session: 2026-04-18T00:04:42.184Z
+Stopped at: Completed 07-02-PLAN.md (window.py surgery: removed ~500 lines Mag API + click injection, added 30-line WS_EX_TRANSPARENT zone poll + DXGICaptureWorker wiring; capture.py tombstoned; 6 files updated; all pre-existing failures confirmed pre-existing via stash verify)
 Resume file: None
 
 Next step: `/gsd:execute-plan 06-04` (manual verification checkpoint on the real dev box — press the configured hotkey, see the bubble toggle, confirm no collision with Cornerstone undo; if collision observed, switch default to Ctrl+Alt+Z in config.py _HOTKEY_DEFAULT and update VALIDATION.md). ALSO STILL OPEN: two UX gaps from Phase 05 verification — (a) no on-bubble close button (Phase 7 tray or small fix-up plan); (b) click-through not actually working in real use despite Phase 04-03 inject_click (proposed Phase 04-04 diagnostic plan). Pre-existing test failures in test_capture_smoke.py + test_window_integration.py + test_window_config_integration.py (TypeError 'Event' object not callable, 6 failed + 4 errors) tracked in .planning/phases/06-global-hotkey/deferred-items.md — also a Phase 04-04 candidate.

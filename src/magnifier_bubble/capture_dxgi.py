@@ -12,11 +12,20 @@ numpy uint8 (H, W, 3) RGB arrays.  PIL.Image.fromarray(frame) works
 directly — no channel manipulation needed.  The opencv processor backend
 is NOT installed in this venv and must NOT be referenced.
 
-REGION FORMAT: dxcam uses (left, top, right, bottom) — NOT (left, top,
-width, height).  Compute: region=(src_x, src_y, src_x+src_w, src_y+src_h).
+REGION FORMAT: dxcam uses per-output (left, top, right, bottom) coordinates.
+Each dxcam output represents one physical monitor.  Region coordinates are
+relative to that output's top-left corner — NOT absolute virtual-screen
+coordinates.  On single-monitor systems output 0 starts at (0, 0) so virtual
+and per-output coordinates are identical.  On multi-monitor systems, region
+coordinates must be offset by subtracting the monitor's virtual-screen origin.
 
 FRAME DEDUPLICATION: grab(new_frame_only=True) returns None when the
 desktop has not changed.  Do NOT push None to the frame queue.
+
+MULTI-MONITOR: The worker detects which physical monitor contains the source
+region center on every frame.  When the bubble crosses a monitor boundary the
+old camera is released and a new one is created for the new output_idx.
+Monitor enumeration order (EnumDisplayMonitors) matches dxcam output_idx order.
 
 CLEANUP: camera.release() MUST be called in the finally block so the
 dxcam DXFactory WeakValueDictionary releases the singleton reference.
@@ -25,10 +34,12 @@ and log a "[WARNING] DXCamera instance already exists" message.
 """
 from __future__ import annotations
 
+import ctypes
+import ctypes.wintypes
 import threading
 import time
 from collections import deque
-from typing import Callable, TYPE_CHECKING
+from typing import Callable, List, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from PIL.Image import Image as PILImage
@@ -37,8 +48,82 @@ if TYPE_CHECKING:
 FrameCallback = Callable[["PILImage"], None]
 
 
+# ---------------------------------------------------------------------------
+# Monitor enumeration helpers (Windows-only; no-op stubs on other platforms)
+# ---------------------------------------------------------------------------
+
+class _MONITORINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", ctypes.c_ulong),
+        ("rcMonitor", ctypes.wintypes.RECT),
+        ("rcWork", ctypes.wintypes.RECT),
+        ("dwFlags", ctypes.c_ulong),
+    ]
+
+
+def _enumerate_monitors() -> List[Tuple[int, int, int, int]]:
+    """Return list of (left, top, right, bottom) for each monitor.
+
+    Enumeration order matches dxcam's output_idx assignment — both use the
+    same underlying Windows monitor enumeration path (EnumDisplayMonitors
+    and IDXGIAdapter::EnumOutputs follow the same device order on single-GPU
+    systems with the primary GPU at adapter index 0).
+    """
+    import sys
+    if sys.platform != "win32":
+        return [(0, 0, 1920, 1080)]
+
+    monitors: List[Tuple[int, int, int, int]] = []
+
+    _MONITORENUMPROC = ctypes.WINFUNCTYPE(
+        ctypes.c_bool,
+        ctypes.c_ulong,
+        ctypes.c_ulong,
+        ctypes.POINTER(ctypes.wintypes.RECT),
+        ctypes.c_long,
+    )
+
+    def _cb(hmon: int, hdc: int, rect_ptr, data: int) -> bool:  # type: ignore[override]
+        info = _MONITORINFO()
+        info.cbSize = ctypes.sizeof(_MONITORINFO)
+        ctypes.windll.user32.GetMonitorInfoW(hmon, ctypes.byref(info))  # type: ignore[attr-defined]
+        r = info.rcMonitor
+        monitors.append((r.left, r.top, r.right, r.bottom))
+        return True
+
+    ctypes.windll.user32.EnumDisplayMonitors(  # type: ignore[attr-defined]
+        None, None, _MONITORENUMPROC(_cb), 0
+    )
+    if not monitors:
+        monitors = [(0, 0, 1920, 1080)]
+    return monitors
+
+
+def _output_for_center(
+    cx: int, cy: int, monitors: List[Tuple[int, int, int, int]]
+) -> Tuple[int, int, int]:
+    """Return (output_idx, mon_left, mon_top) for the monitor containing (cx, cy).
+
+    Falls back to output 0 if the point is outside all known monitors
+    (e.g., bubble partially off-screen or monitors not yet re-enumerated).
+    """
+    for i, (left, top, right, bottom) in enumerate(monitors):
+        if left <= cx < right and top <= cy < bottom:
+            return i, left, top
+    return 0, monitors[0][0], monitors[0][1]
+
+
+# ---------------------------------------------------------------------------
+# DXGICaptureWorker
+# ---------------------------------------------------------------------------
+
 class DXGICaptureWorker(threading.Thread):
-    """30 fps DXGI Desktop Duplication capture producer thread."""
+    """30 fps DXGI Desktop Duplication capture producer thread.
+
+    Multi-monitor aware: automatically switches dxcam output when the bubble
+    crosses a monitor boundary.  Region coordinates are translated from
+    virtual-screen space to per-output space before each grab.
+    """
 
     def __init__(
         self,
@@ -74,23 +159,23 @@ class DXGICaptureWorker(threading.Thread):
 
     def run(self) -> None:
         """Main loop: create dxcam camera on this thread, then capture frames."""
-        import ctypes
+        import ctypes as _ctypes
         from PIL import Image
 
-        _winmm = ctypes.windll.winmm  # type: ignore[attr-defined]
+        _winmm = _ctypes.windll.winmm  # type: ignore[attr-defined]
         _winmm.timeBeginPeriod(1)
 
         camera = None
+        current_output_idx = -1  # force camera creation on first iteration
+        mon_left = 0
+        mon_top = 0
+
         try:
             import dxcam
-            try:
-                camera = dxcam.create(
-                    output_color="RGB",
-                    processor_backend="numpy",
-                )
-            except Exception as exc:
-                print(f"[dxcam] create failed: {exc}", flush=True)
-                return
+
+            # Enumerate monitors once at thread start.  If the display
+            # configuration changes while running the user must restart.
+            monitors = _enumerate_monitors()
 
             while not self._stop_ev.is_set():
                 t0 = time.perf_counter()
@@ -98,13 +183,61 @@ class DXGICaptureWorker(threading.Thread):
                 if w <= 0 or h <= 0:
                     self._stop_ev.wait(self._target_dt)
                     continue
+
                 src_w = max(1, int(round(w / zoom)))
                 src_h = max(1, int(round(h / zoom)))
                 src_x = x + (w - src_w) // 2
                 src_y = y + (h - src_h) // 2
-                # region format: (left, top, right, bottom) — NOT width/height
+
+                # Determine which monitor contains the center of the source rect.
+                cx = src_x + src_w // 2
+                cy = src_y + src_h // 2
+                output_idx, mon_left, mon_top = _output_for_center(cx, cy, monitors)
+
+                # Switch cameras when the bubble crosses a monitor boundary.
+                if output_idx != current_output_idx:
+                    if camera is not None:
+                        try:
+                            camera.release()
+                        except Exception:
+                            pass
+                        camera = None
+                    try:
+                        camera = dxcam.create(
+                            output_idx=output_idx,
+                            output_color="RGB",
+                            processor_backend="numpy",
+                        )
+                        current_output_idx = output_idx
+                    except Exception as exc:
+                        # Output index may not exist (e.g., 2-monitor system
+                        # with only output 0 and 1).  Fall back to primary.
+                        print(f"[dxcam] create(output_idx={output_idx}) failed: {exc}", flush=True)
+                        if output_idx != 0:
+                            try:
+                                camera = dxcam.create(
+                                    output_idx=0,
+                                    output_color="RGB",
+                                    processor_backend="numpy",
+                                )
+                                current_output_idx = 0
+                                mon_left, mon_top = monitors[0][0], monitors[0][1]
+                            except Exception as exc2:
+                                print(f"[dxcam] create(output_idx=0) also failed: {exc2}", flush=True)
+                                self._stop_ev.wait(1.0)
+                                continue
+                        else:
+                            self._stop_ev.wait(1.0)
+                            continue
+
+                # Translate virtual-screen coordinates to per-output coordinates.
+                # dxcam region is relative to the output's top-left corner.
+                adj_x = src_x - mon_left
+                adj_y = src_y - mon_top
+
+                # region format: (left, top, right, bottom) in per-output coords
                 frame = camera.grab(
-                    region=(src_x, src_y, src_x + src_w, src_y + src_h),
+                    region=(adj_x, adj_y, adj_x + src_w, adj_y + src_h),
                     new_frame_only=self._new_frame_only,
                 )
                 if frame is None:

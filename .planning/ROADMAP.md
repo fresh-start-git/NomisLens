@@ -172,7 +172,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Config Persistence | 2/2 | Complete | 2026-04-13 |
 | 6. Global Hotkey | 4/4 | Complete | 2026-04-16 |
 | 7. DXGI Capture + Transparent Input | 3/3 | Complete   | 2026-04-18 |
-| 8. System Tray | 0/2 | Not started | - |
+| 8. System Tray | 1/2 | In Progress|  |
 | 9. Build and Package | 0/TBD | Not started | - |
 
 ## Coverage

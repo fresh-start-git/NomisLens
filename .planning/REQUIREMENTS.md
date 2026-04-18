@@ -53,11 +53,11 @@
 
 ### Tray
 
-- [ ] **TRAY-01**: App launches to system tray with a custom tray icon
-- [ ] **TRAY-02**: Tray menu includes: Show/Hide, Always on Top toggle, Exit
-- [ ] **TRAY-03**: Clicking the tray icon toggles bubble visibility
-- [ ] **TRAY-04**: pystray runs on its own managed thread; all menu callbacks marshaled to Tk main thread via root.after(0, ...)
-- [ ] **TRAY-05**: icon.stop() called before root.destroy() on exit
+- [x] **TRAY-01**: App launches to system tray with a custom tray icon
+- [x] **TRAY-02**: Tray menu includes: Show/Hide, Always on Top toggle, Exit
+- [x] **TRAY-03**: Clicking the tray icon toggles bubble visibility
+- [x] **TRAY-04**: pystray runs on its own managed thread; all menu callbacks marshaled to Tk main thread via root.after(0, ...)
+- [x] **TRAY-05**: icon.stop() called before root.destroy() on exit
 
 ### Persistence
 
@@ -140,11 +140,11 @@
 | HOTK-03 | Phase 6 | Complete |
 | HOTK-04 | Phase 6 | Complete |
 | HOTK-05 | Phase 6 | Complete |
-| TRAY-01 | Phase 7 | Pending |
-| TRAY-02 | Phase 7 | Pending |
-| TRAY-03 | Phase 7 | Pending |
-| TRAY-04 | Phase 7 | Pending |
-| TRAY-05 | Phase 7 | Pending |
+| TRAY-01 | Phase 7 | Complete |
+| TRAY-02 | Phase 7 | Complete |
+| TRAY-03 | Phase 7 | Complete |
+| TRAY-04 | Phase 7 | Complete |
+| TRAY-05 | Phase 7 | Complete |
 | PERS-01 | Phase 5 | Complete |
 | PERS-02 | Phase 5 | Complete |
 | PERS-03 | Phase 5 | Complete |

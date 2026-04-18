@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: "Phase 07 complete — DXGI capture, WS_EX_TRANSPARENT zone poll, edge-of-screen clamp, menu Z-order fix, menu item click injection, test drift fixes (9 tests), EXE built (28 MB). 230/230 pure-Python tests pass. Next: Phase 08 system tray or deferred multi-monitor support."
-last_updated: "2026-04-17T22:30:00Z"
+status: unknown
+stopped_at: "Completed 08-01-PLAN.md (TrayManager + create_tray_image: non-daemon thread, pystray, PIL, all 3 callbacks via root.after(0,...); 8/9 structural lints green, both smoke tests pass; 293 passed, 1 expected deferred failure for Plan 02 window.py wiring)"
+last_updated: "2026-04-18T03:19:19.157Z"
 progress:
   total_phases: 9
-  completed_phases: 7
-  total_plans: 20
+  completed_phases: 6
+  total_plans: 22
   completed_plans: 20
-  percent: 94
+  percent: 85
 ---
 
 ---
@@ -34,12 +34,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Clicks and touches pass through the magnified content area to whatever app is underneath — the bubble enhances vision without blocking the workflow.
-**Current focus:** Phase 08 — system-tray (next)
+**Current focus:** Phase 08 — system-tray
 
 ## Current Position
 
-Phase: 07 (dxgi-capture-transparent-input) — COMPLETE
-Phase: 08 (system-tray) — NOT STARTED
+Phase: 08 (system-tray) — EXECUTING
+Plan: 1 of 2
 
 ## Performance Metrics
 
@@ -89,6 +89,7 @@ Phase: 08 (system-tray) — NOT STARTED
 | Phase 07 P01 | 19 | 3 tasks | 6 files |
 | Phase 07 P02 | 95 | 2 tasks | 6 files |
 | Phase 07 P03 | 5 | 1 tasks | 3 files |
+| Phase 08 P01 | 5 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -186,6 +187,9 @@ Recent decisions affecting current work:
 - [Phase 07-02]: Both after-IDs (_zone_poll_id, _poll_frame_queue_id) stored and after_cancel'd in destroy() before root.destroy() — prevents Tk callbacks on partially torn-down tree
 - [Phase 07-03]: inject_click/inject_right_click/send_rclick_at deleted — Phase 7 WS_EX_TRANSPARENT zone poll makes all three obsolete
 - [Phase 07-03]: _DEBUG_LOG = None enforced by test_debug_log_disabled — ensures production build never writes zoom_log.txt
+- [Phase 08]: daemon=False on TrayManager thread: guarantees icon.stop() finalizer runs on interpreter exit, preventing orphaned tray icons (Pitfall T-6)
+- [Phase 08]: Docstrings must not contain literal banned API names: module docstring 'root.destroy()' tripped structural lint — 4th occurrence of this class of bug (prior: Phase 2-02 LOWORD/HIWORD, Phase 4-03 SendMessageW/PyDLL, Phase 5-01 threading.Timer)
+- [Phase 08]: Tooltip: 'NomisLens — Ctrl+Alt+Z to toggle' surfaces hotkey to clinic users (Research open question 3 resolved)
 
 ### Pending Todos
 
@@ -205,8 +209,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-17T22:30:00Z
-Stopped at: Phase 07 fully complete — all 3 plans executed, 9 test drift failures fixed, dist/NomisLens.exe built (28 MB), 07-VERIFICATION.md written. 230/230 pure-Python tests pass. EXE smoke test exits 0.
+Last session: 2026-04-18T03:19:19.150Z
+Stopped at: Completed 08-01-PLAN.md (TrayManager + create_tray_image: non-daemon thread, pystray, PIL, all 3 callbacks via root.after(0,...); 8/9 structural lints green, both smoke tests pass; 293 passed, 1 expected deferred failure for Plan 02 window.py wiring)
 Resume file: None
 
 Next step: `/gsd:plan-phase 08` (system tray — tray icon, Show/Hide menu item, right-click tray menu). Multi-monitor support deferred per user decision 2026-04-17. OPEN: close button on bubble (overlay dismissable without tray). Tk init.tcl path errors in bash shell are a pre-existing env artifact (not test failures); EXE and normal Windows launch unaffected.

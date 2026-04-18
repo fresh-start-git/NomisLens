@@ -126,15 +126,32 @@ def test_source_uses_lwa_alpha():
     assert "LWA_ALPHA" in src
 
 
-def test_source_does_not_use_ws_ex_transparent():
-    """WS_EX_TRANSPARENT would kill the drag bar (Pitfall 1). It can appear
-    in comments, but never in a bitwise-or expression."""
+def test_source_uses_ws_ex_transparent_only_in_zone_poll():
+    """Phase 7: WS_EX_TRANSPARENT is now INTENTIONALLY used in the zone
+    transparency poll (_zone_transparency_poll) to make the content zone
+    physically click-through.
+
+    Old constraint (Pitfall 1): do not set WS_EX_TRANSPARENT permanently
+    on the whole window — that killed the drag bar.
+    Phase 7 resolution: _zone_transparency_poll sets/clears it dynamically
+    based on cursor position (only set when cursor is in content zone).
+    The drag and control strips remain opaque (transparent flag cleared).
+
+    This test verifies:
+    - WS_EX_TRANSPARENT is referenced (zone poll functionality present)
+    - It is NOT set on the initial extended style expression at construction
+      (would kill drag bar from the start, Pitfall 1 original concern)
+    """
     src = WINDOW_PATH.read_text(encoding="utf-8")
-    # Allow the string to appear in a comment, but not in `| WS_EX_TRANSPARENT`
-    # or `wc.WS_EX_TRANSPARENT`.
-    assert "| wc.WS_EX_TRANSPARENT" not in src
-    assert "|wc.WS_EX_TRANSPARENT" not in src
-    assert "| WS_EX_TRANSPARENT" not in src
+    # Phase 7 uses WS_EX_TRANSPARENT in the zone poll — this is correct
+    assert "wc.WS_EX_TRANSPARENT" in src, (
+        "Phase 7 zone poll must reference wc.WS_EX_TRANSPARENT"
+    )
+    # Construction ext styles must NOT include WS_EX_TRANSPARENT in the
+    # initial OR expression (only LAYERED | TOOLWINDOW | NOACTIVATE)
+    assert "WS_EX_LAYERED | wc.WS_EX_TOOLWINDOW | wc.WS_EX_NOACTIVATE" in src, (
+        "Initial ext style OR must remain LAYERED | TOOLWINDOW | NOACTIVATE"
+    )
 
 
 def test_source_does_not_call_dpi_api():
@@ -171,12 +188,25 @@ def test_source_uses_getparent_for_toplevel_hwnd():
     assert "GetParent(self.root.winfo_id())" in src
 
 
-def test_source_has_pattern_2b_drag_workaround():
-    """Pitfall E: WS_EX_NOACTIVATE dead-drag fix uses ReleaseCapture + WM_NCLBUTTONDOWN."""
+def test_source_has_manual_geometry_drag():
+    """Phase 7: drag is implemented via manual geometry (pure Python),
+    not via WM_NCLBUTTONDOWN SendMessageW (the re-entrant crash path).
+
+    Phase 7 removes click injection code including the legacy ReleaseCapture
+    usage, but the manual-geometry drag pattern (root.geometry + _drag_origin
+    state machine) must still be present for CTRL-01 drag-bar support.
+    HTCAPTION is returned by wndproc.py (not window.py directly) via _zone_fn.
+    """
     src = WINDOW_PATH.read_text(encoding="utf-8")
-    assert "ReleaseCapture" in src
-    assert "WM_NCLBUTTONDOWN" in src
-    assert "HTCAPTION" in src
+    assert "_drag_origin" in src, (
+        "_drag_origin must be present for manual geometry drag"
+    )
+    assert "root.geometry(" in src, (
+        "root.geometry() must be called in the drag motion handler"
+    )
+    assert "_zone_fn" in src, (
+        "_zone_fn must be present to route drag zone to HTCAPTION via wndproc"
+    )
 
 
 # ========== Windows-only integration ==========

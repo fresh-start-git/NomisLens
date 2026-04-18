@@ -32,7 +32,7 @@ def test_attach_config_writer_sets_attribute(tk_session_root):
     from magnifier_bubble.window import BubbleWindow
 
     state = AppState(StateSnapshot())
-    bubble = BubbleWindow(state, click_injection_enabled=False)
+    bubble = BubbleWindow(state)
     try:
         assert bubble._config_writer is None
         fake = _make_fake_writer()
@@ -47,7 +47,7 @@ def test_destroy_calls_flush_pending_exactly_once(tk_session_root):
     from magnifier_bubble.window import BubbleWindow
 
     state = AppState(StateSnapshot())
-    bubble = BubbleWindow(state, click_injection_enabled=False)
+    bubble = BubbleWindow(state)
     fake = _make_fake_writer()
     bubble.attach_config_writer(fake)
 
@@ -66,7 +66,7 @@ def test_destroy_without_writer_does_not_raise(tk_session_root):
     from magnifier_bubble.window import BubbleWindow
 
     state = AppState(StateSnapshot())
-    bubble = BubbleWindow(state, click_injection_enabled=False)
+    bubble = BubbleWindow(state)
     # No attach_config_writer call.
     bubble.destroy()  # Must not raise AttributeError or anything else.
 
@@ -79,7 +79,7 @@ def test_destroy_swallows_flush_exception(tk_session_root):
     from magnifier_bubble.window import BubbleWindow
 
     state = AppState(StateSnapshot())
-    bubble = BubbleWindow(state, click_injection_enabled=False)
+    bubble = BubbleWindow(state)
 
     boom = types.SimpleNamespace()
     boom.flush_calls = 0

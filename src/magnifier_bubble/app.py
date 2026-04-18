@@ -47,15 +47,6 @@ def main() -> int:
         description="Ultimate Zoom - floating magnifier bubble"
     )
     parser.add_argument(
-        "--no-click-injection",
-        action="store_true",
-        help=(
-            "Disable cross-process click injection. Middle-zone clicks "
-            "will be consumed by the bubble (Phase 2 fallback behavior). "
-            "Use if PostMessageW injection misbehaves against Cornerstone."
-        ),
-    )
-    parser.add_argument(
         "--no-hotkey",
         action="store_true",
         help=(
@@ -110,16 +101,12 @@ def main() -> int:
     state = AppState(snap)
 
     # Phase 2/4: create the bubble and drive the Tk event loop.
-    bubble = BubbleWindow(
-        state,
-        click_injection_enabled=not args.no_click_injection,
-    )
+    bubble = BubbleWindow(state)
     print(
         f"[bubble] hwnd={bubble._hwnd} "
         f"geometry={state.snapshot().w}x{state.snapshot().h}"
         f"+{state.snapshot().x}+{state.snapshot().y} "
-        f"shape={state.snapshot().shape} "
-        f"click_injection={bubble._click_injection_enabled}"
+        f"shape={state.snapshot().shape}"
     )
 
     # Phase 5 PERS-02 + PERS-04: construct the debounced writer

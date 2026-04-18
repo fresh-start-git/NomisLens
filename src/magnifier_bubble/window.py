@@ -580,7 +580,7 @@ class BubbleWindow:
                 src_x = snap.x + (snap.w - snap.w / zoom) / 2
                 src_y = snap.y + (snap.h - snap.h / zoom) / 2
                 actual_x = round(src_x + event.x / zoom)
-                actual_y = round(src_y + (event.y - DRAG_STRIP_HEIGHT) / zoom)
+                actual_y = round(src_y + event.y / zoom)
                 _hwnd = self._hwnd
                 cur_ex = _u32m.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
                 _u32m.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
@@ -776,17 +776,26 @@ class BubbleWindow:
         u32 = ctypes.windll.user32  # type: ignore[attr-defined]
 
         # --- Context menu detection and Z-order fix ---
+        # FindWindowW returns the topmost #32768 window. Guard with a minimum
+        # size check to reject stale hidden system windows (valid menus are
+        # always at least 50×15 px). Re-assert Z-order every poll: Chrome
+        # reasserts HWND_TOPMOST on its own message loop between our 50 ms ticks,
+        # so a one-shot fix is overridden and the menu climbs above the overlay.
         menu_hwnd = u32.FindWindowW("#32768", None)
-        menu_visible = bool(menu_hwnd and u32.IsWindowVisible(menu_hwnd))
+        menu_visible = False
+        if menu_hwnd and u32.IsWindowVisible(menu_hwnd):
+            _mr = ctypes.wintypes.RECT()
+            u32.GetWindowRect(menu_hwnd, ctypes.byref(_mr))
+            if (_mr.right - _mr.left) >= 50 and (_mr.bottom - _mr.top) >= 15:
+                menu_visible = True
         if menu_visible:
-            if self._active_menu_hwnd != menu_hwnd:
-                self._active_menu_hwnd = menu_hwnd
-                # Assert overlay at HWND_TOPMOST, then push menu just below.
-                # DXGI Desktop Duplication captures through WDA_EXCLUDEFROMCAPTURE
-                # and sees the menu when it is below the overlay in Z-order.
-                _SWP = 0x0002 | 0x0001 | 0x0010  # NOMOVE | NOSIZE | NOACTIVATE
-                u32.SetWindowPos(self._hwnd, -1, 0, 0, 0, 0, _SWP)   # HWND_TOPMOST
-                u32.SetWindowPos(menu_hwnd, self._hwnd, 0, 0, 0, 0, _SWP)
+            self._active_menu_hwnd = menu_hwnd
+            # Always re-assert: overlay at HWND_TOPMOST, menu just below.
+            # DXGI captures through WDA_EXCLUDEFROMCAPTURE and sees the menu
+            # when it is below the overlay in Z-order.
+            _SWP = 0x0002 | 0x0001 | 0x0010  # NOMOVE | NOSIZE | NOACTIVATE
+            u32.SetWindowPos(self._hwnd, -1, 0, 0, 0, 0, _SWP)   # HWND_TOPMOST
+            u32.SetWindowPos(menu_hwnd, self._hwnd, 0, 0, 0, 0, _SWP)
         else:
             if self._active_menu_hwnd:
                 self._active_menu_hwnd = 0

@@ -600,22 +600,21 @@ class BubbleWindow:
                 self.root.winfo_x(), self.root.winfo_y(),
             )
             return
-        # Content zone: WS_EX_TRANSPARENT set by _zone_transparency_poll
-        # means physical clicks pass through to the underlying app.
-        # Exception: when a context menu is active, inject a zoom-mapped click
-        # so the menu item at the magnified cursor position is selected.
+        # Content zone click — compute zoom-mapped screen position and inject.
+        # WS_EX_TRANSPARENT is no longer used (it forwarded at physical cursor
+        # coords which are wrong when zoom > 1).  The WndProc returns HTCLIENT
+        # so Tk delivers this event; we forward at the correct mapped position.
+        snap = self.state.snapshot()
+        src_x = snap.x + (snap.w - snap.w / snap.zoom) / 2
+        src_y = snap.y + (snap.h - snap.h / snap.zoom) / 2
+        actual_x = round(src_x + event.x / snap.zoom)
+        actual_y = round(src_y + event.y / snap.zoom)
         if self._active_menu_hwnd and sys.platform == "win32":
             _menu_h = self._active_menu_hwnd
             _u32m = ctypes.windll.user32  # type: ignore[attr-defined]
             if not _u32m.IsWindowVisible(_menu_h):
                 self._active_menu_hwnd = 0
             else:
-                snap = self.state.snapshot()
-                # Menu item is at the physical cursor position: the user moved
-                # their cursor onto the menu item they want to click. No zoom
-                # mapping — actual coords ARE the cursor's screen position.
-                actual_x = snap.x + event.x
-                actual_y = snap.y + event.y
                 _hwnd = self._hwnd
                 cur_ex = _u32m.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
                 _u32m.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
@@ -623,6 +622,18 @@ class BubbleWindow:
                 from magnifier_bubble.clickthru import send_lclick_at
                 send_lclick_at(actual_x, actual_y)
                 self.root.after(16, lambda: _u32m.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT))
+        elif sys.platform == "win32":
+            # Same WS_EX_TRANSPARENT + ReleaseCapture pattern as the menu path:
+            # the zoom-mapped position falls inside the overlay, so we must be
+            # transparent during the SendInput batch or the click hits us again.
+            _u32c = ctypes.windll.user32  # type: ignore[attr-defined]
+            _hwnd = self._hwnd
+            cur_ex = _u32c.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
+            _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
+            _u32c.ReleaseCapture()
+            from magnifier_bubble.clickthru import send_lclick_at
+            send_lclick_at(actual_x, actual_y)
+            self.root.after(16, lambda: _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT))
 
     def _on_canvas_drag(self, event) -> None:
         """Phase 4 amended: resize drag takes precedence over move drag.
@@ -836,33 +847,10 @@ class BubbleWindow:
             if self._active_menu_hwnd:
                 self._active_menu_hwnd = 0
 
-        pt = ctypes.wintypes.POINT()
-        u32.GetCursorPos(ctypes.byref(pt))
-        wx = self.root.winfo_x()
-        wy = self.root.winfo_y()
-        ww = self.root.winfo_width()
-        wh = self.root.winfo_height()
-        cx = pt.x - wx
-        cy = pt.y - wy
-        in_overlay = 0 <= cx < ww and 0 <= cy < wh
-        # Never set TRANSPARENT while dragging or resizing: the cursor passes
-        # through the content zone at high speed and TRANSPARENT would steal
-        # the B1-Motion / ButtonRelease-1 events, freezing the drag.
-        # Also never set TRANSPARENT while a context menu is active: we need
-        # to receive left-click events to inject zoom-mapped menu item clicks.
-        is_dragging = self._drag_origin is not None or self._resize_origin is not None
-        in_content = (
-            in_overlay
-            and not is_dragging
-            and not self._active_menu_hwnd
-            and DRAG_STRIP_HEIGHT <= cy < (wh - CONTROL_STRIP_HEIGHT)
-        )
-        cur_ex = u32.GetWindowLongW(self._hwnd, wc.GWL_EXSTYLE)
-        has_t = bool(cur_ex & wc.WS_EX_TRANSPARENT)
-        if in_content and not has_t:
-            u32.SetWindowLongW(self._hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
-        elif not in_content and has_t:
-            u32.SetWindowLongW(self._hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT)
+        # WS_EX_TRANSPARENT is no longer used for content-zone hover pass-through.
+        # It is now set only for the ~16 ms duration of each injected click by
+        # _on_canvas_press / _on_canvas_rclick so the SendInput batch reaches
+        # the underlying window.  The poll must not touch it here.
         self._zone_poll_id = self.root.after(50, self._zone_transparency_poll)
 
     def _on_frame(self, img) -> None:
@@ -946,10 +934,29 @@ class BubbleWindow:
         self._canvas.itemconfig(self._resize_btn_text_id, fill=bc)
 
     def _on_canvas_rclick(self, event) -> None:
-        """Right-click top strip to cycle color theme."""
+        """Right-click top strip to cycle color theme; content zone passes through."""
         if event.y < DRAG_STRIP_HEIGHT:
             self._apply_theme(self._theme_idx + 1)
             self._save_theme()
+            return
+        _h = self.root.winfo_height()
+        if event.y >= _h - CONTROL_STRIP_HEIGHT:
+            return
+        # Content zone right-click — zoom-map and inject.
+        if sys.platform == "win32":
+            snap = self.state.snapshot()
+            src_x = snap.x + (snap.w - snap.w / snap.zoom) / 2
+            src_y = snap.y + (snap.h - snap.h / snap.zoom) / 2
+            actual_x = round(src_x + event.x / snap.zoom)
+            actual_y = round(src_y + event.y / snap.zoom)
+            _u32r = ctypes.windll.user32  # type: ignore[attr-defined]
+            _hwnd = self._hwnd
+            cur_ex = _u32r.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
+            _u32r.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
+            _u32r.ReleaseCapture()
+            from magnifier_bubble.clickthru import send_rclick_at
+            send_rclick_at(actual_x, actual_y)
+            self.root.after(16, lambda: _u32r.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT))
 
     # ---- Public teardown ----
 

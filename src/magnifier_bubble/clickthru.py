@@ -1,14 +1,16 @@
-"""Click-through input helpers — Phase 7 reduced version.
+"""Click-through input helpers.
 
-Phase 4 inject_click and inject_right_click are deleted (Phase 7 uses
-WS_EX_TRANSPARENT content zone for natural input pass-through instead).
-send_rclick_at is deleted (right-clicks fall through WS_EX_TRANSPARENT naturally).
+WS_EX_TRANSPARENT content-zone pass-through is no longer used (it forwarded
+clicks at the physical cursor position, which is inaccurate when zoom > 1).
+All content-zone clicks are now intercepted by Tk and injected at the
+zoom-mapped screen position via SendInput.
 
-Remaining functions (kept for potential future use or edge cases):
-  send_lclick_at — atomic left-click at screen coords via SendInput
+Functions:
+  send_lclick_at  — atomic left-click at screen coords via SendInput
+  send_rclick_at  — atomic right-click at screen coords via SendInput
   send_lclick_here — left-click at current cursor position via SendInput
-  send_click_at — left-click at screen coords (3-event: MOVE+DOWN+UP)
-  send_hover_at — mouse MOVE only, no click (WinUI3 hover-arm)
+  send_click_at   — left-click at screen coords (3-event: MOVE+DOWN+UP)
+  send_hover_at   — mouse MOVE only, no click (WinUI3 hover-arm)
   inject_touch_at — WinUI3-compatible touch tap via InjectTouchInput
 
 DEBUG: _DEBUG_LOG is None (production mode). Set to a file path to enable.
@@ -378,6 +380,60 @@ def send_lclick_at(screen_x: int, screen_y: int) -> None:
         u32.SendInput(4, buf, ctypes.sizeof(_INPUT))
     except Exception as _e:
         _dbg(f"send_lclick_at exception: {_e}")
+
+
+def send_rclick_at(screen_x: int, screen_y: int) -> None:
+    """Move cursor to (screen_x, screen_y), inject a right-click, restore cursor.
+
+    Caller MUST set WS_EX_TRANSPARENT on the overlay before calling so the
+    injected events reach the window below.  Never raises.
+    """
+    try:
+        u32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        cur_pt = wintypes.POINT()
+        u32.GetCursorPos(ctypes.byref(cur_pt))
+
+        u32.GetSystemMetrics.argtypes = [ctypes.c_int]
+        u32.GetSystemMetrics.restype = ctypes.c_int
+        vx = u32.GetSystemMetrics(76)
+        vy = u32.GetSystemMetrics(77)
+        vw = u32.GetSystemMetrics(78)
+        vh = u32.GetSystemMetrics(79)
+
+        def _norm(px: int, py: int):
+            return (
+                round((px - vx) * 65536 / vw),
+                round((py - vy) * 65536 / vh),
+            )
+
+        tgt_nx, tgt_ny = _norm(screen_x, screen_y)
+        orig_nx, orig_ny = _norm(cur_pt.x, cur_pt.y)
+
+        move = _INPUT()
+        move.type = _INPUT_MOUSE
+        move.mi.dx = tgt_nx
+        move.mi.dy = tgt_ny
+        move.mi.dwFlags = _MOUSEEVENTF_MOVE | _MOUSEEVENTF_ABSOLUTE | _MOUSEEVENTF_VIRTUALDESK
+
+        down = _INPUT()
+        down.type = _INPUT_MOUSE
+        down.mi.dwFlags = _MOUSEEVENTF_RIGHTDOWN
+
+        up = _INPUT()
+        up.type = _INPUT_MOUSE
+        up.mi.dwFlags = _MOUSEEVENTF_RIGHTUP
+
+        restore = _INPUT()
+        restore.type = _INPUT_MOUSE
+        restore.mi.dx = orig_nx
+        restore.mi.dy = orig_ny
+        restore.mi.dwFlags = _MOUSEEVENTF_MOVE | _MOUSEEVENTF_ABSOLUTE | _MOUSEEVENTF_VIRTUALDESK
+
+        _dbg(f"send_rclick_at target=({screen_x},{screen_y}) orig=({cur_pt.x},{cur_pt.y})")
+        buf = (_INPUT * 4)(move, down, up, restore)
+        u32.SendInput(4, buf, ctypes.sizeof(_INPUT))
+    except Exception as _e:
+        _dbg(f"send_rclick_at exception: {_e}")
 
 
 def send_lclick_here() -> None:

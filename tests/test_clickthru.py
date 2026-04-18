@@ -72,11 +72,11 @@ def test_inject_right_click_deleted():
     )
 
 
-def test_send_rclick_at_deleted():
-    """Phase 7: send_rclick_at must NOT exist in clickthru.py."""
+def test_send_rclick_at_exists():
+    """send_rclick_at restored for content-zone right-click injection."""
     from magnifier_bubble import clickthru
-    assert not hasattr(clickthru, "send_rclick_at"), (
-        "send_rclick_at must be deleted in Phase 7"
+    assert callable(getattr(clickthru, "send_rclick_at", None)), (
+        "send_rclick_at must exist in clickthru.py for right-click injection"
     )
 
 

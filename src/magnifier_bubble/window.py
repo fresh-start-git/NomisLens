@@ -41,7 +41,6 @@ from PIL import ImageTk
 
 from magnifier_bubble import shapes, wndproc
 from magnifier_bubble import winconst as wc
-from magnifier_bubble.capture import CaptureWorker
 from magnifier_bubble.controls import (
     ButtonRect,
     SHAPE_CYCLE,
@@ -61,11 +60,6 @@ STRIP_COLOR: str = "#1a1a1a"    # dark gray - LAYT-05 (flat dark; no per-pixel a
 BG_COLOR: str = "#0a0a0a"       # canvas background - visible inside content zone until Phase 3
 DRAG_STRIP_HEIGHT: int = 44     # matches hit_test.DRAG_BAR_HEIGHT
 CONTROL_STRIP_HEIGHT: int = 44  # matches hit_test.CONTROL_BAR_HEIGHT
-
-# Magnification-API transform matrix (3×3 row-major float).
-# Filled in _mag_set_transform: diagonal (zoom, zoom, 1), rest zero.
-class _MAGTRANSFORM(ctypes.Structure):
-    _fields_ = [("v", (ctypes.c_float * 3) * 3)]
 
 
 # Color themes — right-click the top strip to cycle.
@@ -124,17 +118,8 @@ class BubbleWindow:
     def __init__(
         self,
         state: AppState,
-        *,
-        click_injection_enabled: bool = True,
     ) -> None:
         self.state: AppState = state
-        # Phase 4 Plan 03: cross-process click injection toggle. When True
-        # (default), content-zone clicks on the bubble are forwarded to the
-        # app below via PostMessageW. When False (set by app.py from the
-        # --no-click-injection CLI flag), content-zone clicks are consumed
-        # by the bubble — Phase 2 fallback behavior, documented in
-        # 04-RESEARCH.md Open Question #1.
-        self._click_injection_enabled: bool = click_injection_enabled
         self._wndproc_keepalive: wndproc.WndProcKeepalive | None = None
         self._canvas_wndproc_keepalive: wndproc.WndProcKeepalive | None = None
         self._frame_wndproc_keepalive: wndproc.WndProcKeepalive | None = None
@@ -165,6 +150,9 @@ class BubbleWindow:
 
         snap = state.snapshot()
 
+        # Phase 7: DXGICaptureWorker set by start_capture()
+        self._capture_worker = None  # DXGICaptureWorker set by start_capture()
+
         # --- Step 1: Create Tk root, hidden ---
         self.root: tk.Tk = tk.Tk()
         self.root.withdraw()
@@ -183,17 +171,6 @@ class BubbleWindow:
 
         # --- Step 6-8: Windows-only ext styles + layered window ---
         self._hwnd: int = 0
-        # Set to the #32768 menu HWND while a context menu is visible after a
-        # right-click pass-through.  _on_canvas_press uses it to PostMessageW
-        # directly to the known menu window, bypassing inject_click's Z-order
-        # walk which can find PROGMAN/WorkerW (full-screen desktop) instead.
-        self._active_menu_hwnd: int = 0
-        self._active_menu_cls: str = ""   # class of the active menu window
-        # True when SetWindowPos on the active menu HWND would dismiss it.
-        # Set on first detection; used to skip Z-order fix on every poll tick.
-        # Covers both WinUI3 PopupWindowSiteBridge and desktop shell #32768
-        # menus (owned by Progman / WorkerW) — both are dismissed by SWP.
-        self._active_menu_skip_zorder: bool = False
         if sys.platform == "win32":
             u32 = _u32()
             self._hwnd = int(u32.GetParent(self.root.winfo_id()) or 0)
@@ -465,14 +442,13 @@ class BubbleWindow:
         self._prev_snap = self.state.snapshot()
         self.state.on_change(self._on_state_change)
 
-        # Phase 3: capture worker placeholder (started by app.py via start_capture)
-        self._capture_worker: CaptureWorker | None = None
-
-        # Magnification API state (alternative to mss capture; set in _mag_init).
-        self._hwnd_mag: int = 0        # Magnifier child-window HWND
-        self._mag_dll = None           # magnification.dll WinDLL handle
-        self._mag_last_zoom: float = 0.0
-        self._mag_last_wh: tuple[int, int] = (0, 0)
+        # Phase 7: zone transparency poll — sets WS_EX_TRANSPARENT when cursor
+        # is in the content zone so physical mouse/touch falls through to the
+        # underlying app. Cleared for drag and control strips.
+        self._zone_poll_id: str | None = None
+        self._poll_frame_queue_id: str | None = None
+        if sys.platform == "win32" and self._hwnd:
+            self._zone_poll_id = self.root.after(50, self._zone_transparency_poll)
 
     # ---- Phase 5: Config writer attach point ----
 
@@ -547,15 +523,13 @@ class BubbleWindow:
         )
 
     def _on_canvas_press(self, event) -> None:
-        """Phase 4 dispatch: button hit-test first, then drag, then
-        Plan 04-03 content-zone click injection.
+        """Phase 4 dispatch: button hit-test first, then drag.
 
         Order of checks (first match wins):
           1. controls.hit_button -> named button dispatch
-          2. top-strip y < DRAG_STRIP_HEIGHT -> Phase 3 drag start
-          3. middle band + click_injection_enabled -> inject_click to
-             the app below via PostMessageW (Plan 04-03 / Pattern 6)
-          4. otherwise -> no-op (bottom strip without a button hit)
+          2. top-strip y < DRAG_STRIP_HEIGHT -> drag start
+          3. bottom-strip y >= h-CONTROL_STRIP_HEIGHT -> drag start
+          4. otherwise -> no-op (content zone: WS_EX_TRANSPARENT handles pass-through)
         """
         btn = hit_button(event.x, event.y, self._buttons)
         if btn == "close":
@@ -582,228 +556,14 @@ class BubbleWindow:
         # of the screen (cursor can't go above y=0 to drag from the top bar).
         _h = self.root.winfo_height()
         if event.y < DRAG_STRIP_HEIGHT or event.y >= _h - CONTROL_STRIP_HEIGHT:
-            # If a context menu was active, clear it — the user dragging the
-            # overlay signals they've abandoned the menu.  Don't hard-block drag
-            # here: if _active_menu_hwnd gets stuck for any reason, the overlay
-            # would become permanently immovable (perceived as a crash).
-            if self._active_menu_hwnd:
-                self._active_menu_hwnd = 0
-                self._active_menu_cls = ""
-                self._active_menu_skip_zorder = False
             self._drag_origin = (
                 event.x_root, event.y_root,
                 self.root.winfo_x(), self.root.winfo_y(),
             )
             return
-        # Phase 4 Plan 03: content-zone click injection.
-        # The middle band is everything between the drag strip and the
-        # control strip. If a click lands here (no button hit), forward
-        # it to whatever app is below us via PostMessageW. The self-HWND
-        # guard inside inject_click (Pitfall I) prevents recursion into
-        # our own layered bubble. Import is deferred so clickthru.py's
-        # Windows-only ctypes surface stays out of window.py's module-
-        # level import graph on non-Windows CI.
-        if (
-            self._click_injection_enabled
-            and sys.platform == "win32"
-            and self._hwnd
-            and DRAG_STRIP_HEIGHT <= event.y < (self.root.winfo_height() - CONTROL_STRIP_HEIGHT)
-        ):
-            # Map canvas (event.x, event.y) back through the zoom transform to
-            # find the source-content screen coordinate.  The capture worker
-            # grabs a (w/zoom × h/zoom) region centered on the overlay, then
-            # scales it up.  Inverting that:
-            #   src_x = overlay_x + (w - w/zoom) / 2
-            #   actual_screen_x = src_x + canvas_x / zoom
-            snap = self.state.snapshot()
-            zoom = snap.zoom
-            src_x = snap.x + (snap.w - snap.w / zoom) / 2
-            src_y = snap.y + (snap.h - snap.h / zoom) / 2
-            actual_x = round(src_x + event.x / zoom)
-            actual_y = round(src_y + (event.y - DRAG_STRIP_HEIGHT) / zoom)
-            # Strategy 0: active context menu — hide overlay then SendInput.
-            # WinUI3 PopupWindowSiteBridge ignores PostMessageW WM_LBUTTONDOWN;
-            # it only processes real hardware pointer events (EnableMouseInPointer).
-            # Our overlay has WS_EX_NOACTIVATE so SW_HIDE never steals focus or
-            # dismisses the menu (the menu is a separate File Explorer window).
-            # Pattern mirrors the existing DesktopChildSiteBridge two-phase path.
-            if self._active_menu_hwnd:
-                import ctypes as _ct
-                from ctypes import wintypes as _wt
-                from magnifier_bubble.clickthru import _dbg, send_hover_at, send_click_at
-                _u32m = _ct.windll.user32  # type: ignore[attr-defined]
-                _menu_h = self._active_menu_hwnd   # local copy — safe to read
-                if not _u32m.IsWindowVisible(_menu_h):
-                    self._active_menu_hwnd = 0
-                    self._active_menu_cls = ""
-                    self._active_menu_skip_zorder = False
-                    # Menu gone — fall through to inject_click below.
-                elif self._active_menu_skip_zorder:
-                    # Desktop shell (#32768 owned by Progman/WorkerW) or
-                    # WinUI3 PopupWindowSiteBridge — these menus sit ABOVE
-                    # our overlay in Z-order (SetWindowPos on them causes an
-                    # instant dismissal so we never push them below us).
-                    # The Magnifier API shows them because DWM composes them
-                    # above the overlay in the scene.
-                    # The zoom-mapped (actual_x, actual_y) correctly maps the
-                    # canvas click to the menu item's real screen position —
-                    # the same math that placed the right-click.
-                    # No WS_EX_TRANSPARENT needed: the menu is the topmost
-                    # window at (actual_x, actual_y), so SendInput routes to
-                    # it naturally without any transparency tricks.
-                    from magnifier_bubble.clickthru import _dbg, send_click_at as _sca
-                    _u32m.ReleaseCapture()
-                    _dbg(f"menu lclick skip_zorder: actual=({actual_x},{actual_y})")
-                    _sca(actual_x, actual_y)
-                    return
-                else:
-                    # Determine the menu class — WinUI3 vs classic Win32/Chrome.
-                    _cls_b = _ct.create_unicode_buffer(128)
-                    _u32m.GetClassNameW(_menu_h, _cls_b, 128)
-                    _mcls  = _cls_b.value
-                    _dbg(f"menu lclick: cls={_mcls!r} actual=({actual_x},{actual_y})")
-
-                    if "PopupWindowSiteBridge" in _mcls:
-                        # WinUI3 popup: HTTRANSPARENT alone is insufficient —
-                        # WindowFromPoint still reports our canvas so the
-                        # deferred SendInput LEFTDOWN is re-delivered to us,
-                        # causing an infinite _on_canvas_press loop.
-                        # Fix: set WS_EX_TRANSPARENT immediately before
-                        # send_click_at fires (inside the deferred callback)
-                        # so the OS bypasses our window for that one click.
-                        # WS_EX_TRANSPARENT is cleared 16 ms later — a short
-                        # enough window that physical user right-clicks during
-                        # the 150 ms hover delay still reach Tk normally.
-                        _u32m.ReleaseCapture()
-                        _dbg(
-                            f"menu lclick WinUI3:"
-                            f" actual=({actual_x},{actual_y})"
-                        )
-                        send_hover_at(actual_x, actual_y)
-                        def _do_click_ui3(
-                            _ax=actual_x, _ay=actual_y,
-                            _hwnd=self._hwnd, _u=_u32m,
-                            _root=self.root,
-                        ):
-                            # Set WS_EX_TRANSPARENT just before the click.
-                            _cx = _u.GetWindowLongW(_hwnd, -20)
-                            _u.SetWindowLongW(
-                                _hwnd, -20,
-                                _cx | wc.WS_EX_TRANSPARENT,
-                            )
-                            send_click_at(_ax, _ay)
-                            # Restore after one frame — SendInput events are
-                            # in the hardware queue and will be routed while
-                            # WS_EX_TRANSPARENT is still set.  16 ms is enough.
-                            _clean = _cx & ~wc.WS_EX_TRANSPARENT
-                            _root.after(
-                                16,
-                                lambda __u=_u, __h=_hwnd, __ex=_clean:
-                                    __u.SetWindowLongW(__h, -20, __ex),
-                            )
-                        self.root.after(150, _do_click_ui3)
-                    else:
-                        # Classic Win32 / Chrome / Firefox menus (pushed below
-                        # our overlay by _poll_menu_restore).  PostMessageW
-                        # directly to the known menu HWND — bypasses all
-                        # WS_EX_TRANSPARENT / Canvas-interception problems.
-                        # WS_EX_TRANSPARENT on self._hwnd does NOT propagate
-                        # to the Canvas child, so SendInput still routes back
-                        # to our canvas.  PostMessageW sidesteps hit-testing
-                        # entirely by targeting the menu window identity.
-                        # ScreenToClient converts (actual_x, actual_y) to
-                        # client coordinates the menu expects in lParam.
-                        import ctypes as _ct2
-                        from ctypes import wintypes as _wt2
-                        _pt2 = _wt2.POINT()
-                        _pt2.x = actual_x
-                        _pt2.y = actual_y
-                        _u32m.ScreenToClient(_ct2.c_void_p(_menu_h), _ct2.byref(_pt2))
-                        _cx2, _cy2 = _pt2.x, _pt2.y
-                        _lp2 = (_cy2 << 16) | (_cx2 & 0xFFFF)
-                        _u32m.ReleaseCapture()
-                        _dbg(
-                            f"menu lclick PostMsgW:"
-                            f" hwnd={_menu_h}"
-                            f" client=({_cx2},{_cy2})"
-                            f" actual=({actual_x},{actual_y})"
-                        )
-                        _u32m.PostMessageW(_ct2.c_void_p(_menu_h), wc.WM_LBUTTONDOWN, 0, _lp2)
-                        _u32m.PostMessageW(_ct2.c_void_p(_menu_h), wc.WM_LBUTTONUP, 0, _lp2)
-                    return
-            # Strategy 1: PostMessageW directly to the deepest child HWND below
-            # our bubble (no hide/show needed — message goes straight to the
-            # target's queue regardless of z-order).  inject_click walks the
-            # Z-order past own_hwnd so it never returns our own HWND.
-            from magnifier_bubble.clickthru import (
-                inject_click, send_click_at, send_hover_at, inject_touch_at,
-            )
-            _result = inject_click(actual_x, actual_y, self._hwnd)
-            if _result is not True:
-                # Strategy 2 / 3: hide overlay, inject input, restore.
-                # _result is False  → SW_HIDE + SendInput  (mouse events)
-                # _result is None   → SW_HIDE + WinUI3 two-phase hover→click
-                import ctypes as _ct
-                from ctypes import wintypes as _wt
-                _u32 = _ct.windll.user32  # type: ignore[attr-defined]
-                _old_pt = _wt.POINT()
-                _u32.GetCursorPos(_ct.byref(_old_pt))
-                old_cx, old_cy = _old_pt.x, _old_pt.y
-                _u32.ShowWindow(self._hwnd, 0)   # SW_HIDE
-                # Defer input by 50 ms so DWM and WinUI3's DirectComposition
-                # tree process SW_HIDE before synthetic input arrives.
-                if _result is None:
-                    # WinUI3 path (DesktopChildSiteBridge / breadcrumb bar).
-                    # Strategy A: InjectTouchInput — goes through the OS pointer
-                    # stack WinUI3 registers for.  Requires a touch digitizer
-                    # driver; fails with 0x57 on non-touch hardware.
-                    # Strategy B (fallback): two-phase SendInput.
-                    #   Phase 1 — MOVE (hover): arms the BreadcrumbBar item by
-                    #     triggering WinUI3 PointerEntered.
-                    #   Phase 2 — DOWN + UP: fires 150 ms later so WinUI3 has
-                    #     processed PointerEntered before PointerPressed arrives.
-                    def _deferred_winui3(
-                        _u32=_u32, _hwnd=self._hwnd,
-                        _cx=old_cx, _cy=old_cy,
-                        _ax=actual_x, _ay=actual_y,
-                    ):
-                        if inject_touch_at(_ax, _ay):
-                            def _restore(__u32=_u32, __hwnd=_hwnd, __cx=_cx, __cy=_cy):
-                                __u32.ShowWindow(__hwnd, 8)
-                                __u32.SetCursorPos(__cx, __cy)
-                            self.root.after(32, _restore)
-                        else:
-                            # Touch unavailable — two-phase mouse: hover then click.
-                            send_hover_at(_ax, _ay)
-                            def _phase2(
-                                __u32=_u32, __hwnd=_hwnd,
-                                __cx=_cx, __cy=_cy,
-                                __ax=_ax, __ay=_ay,
-                            ):
-                                send_click_at(__ax, __ay)
-                                def _restore(
-                                    ___u32=__u32, ___hwnd=__hwnd,
-                                    ___cx=__cx, ___cy=__cy,
-                                ):
-                                    ___u32.ShowWindow(___hwnd, 8)
-                                    ___u32.SetCursorPos(___cx, ___cy)
-                                self.root.after(32, _restore)
-                            self.root.after(150, _phase2)
-                    self.root.after(50, _deferred_winui3)
-                else:
-                    # Mouse path: SW_HIDE + SendInput for targets that ignore
-                    # PostMessageW (e.g. ContentIslandWindow).
-                    def _deferred(
-                        _u32=_u32, _hwnd=self._hwnd,
-                        _cx=old_cx, _cy=old_cy,
-                        _ax=actual_x, _ay=actual_y,
-                    ):
-                        send_click_at(_ax, _ay)
-                        def _restore(__u32=_u32, __hwnd=_hwnd, __cx=_cx, __cy=_cy):
-                            __u32.ShowWindow(__hwnd, 8)   # SW_SHOWNA
-                            __u32.SetCursorPos(__cx, __cy)
-                        self.root.after(32, _restore)
-                    self.root.after(50, _deferred)
+        # Content zone: WS_EX_TRANSPARENT set by _zone_transparency_poll
+        # means physical clicks pass through to the underlying app.
+        # No action needed here — the OS handles routing.
 
     def _on_canvas_drag(self, event) -> None:
         """Phase 4 amended: resize drag takes precedence over move drag.
@@ -969,7 +729,39 @@ class BubbleWindow:
                 break
         if img is not None:
             self._on_frame(img)
-        self.root.after(16, self._poll_frame_queue)  # ~60 fps poll
+        self._poll_frame_queue_id = self.root.after(16, self._poll_frame_queue)  # ~60 fps poll
+
+    def _zone_transparency_poll(self) -> None:
+        """50 ms timer: set WS_EX_TRANSPARENT when cursor is in content zone,
+        clear it when cursor is in drag/control strip or outside overlay.
+
+        When WS_EX_TRANSPARENT is set, WindowFromPoint skips the overlay entirely
+        and all mouse/touch events go to the topmost window at the cursor position
+        regardless of process. This replaces all click injection machinery.
+
+        Runs on Tk main thread only — safe to call SetWindowLongW here.
+        Cancellable: cancel self._zone_poll_id in destroy() before root.destroy().
+        """
+        if sys.platform != "win32" or not self._hwnd:
+            return
+        u32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        pt = ctypes.wintypes.POINT()
+        u32.GetCursorPos(ctypes.byref(pt))
+        wx = self.root.winfo_x()
+        wy = self.root.winfo_y()
+        ww = self.root.winfo_width()
+        wh = self.root.winfo_height()
+        cx = pt.x - wx
+        cy = pt.y - wy
+        in_overlay = 0 <= cx < ww and 0 <= cy < wh
+        in_content = in_overlay and DRAG_STRIP_HEIGHT <= cy < (wh - CONTROL_STRIP_HEIGHT)
+        cur_ex = u32.GetWindowLongW(self._hwnd, wc.GWL_EXSTYLE)
+        has_t = bool(cur_ex & wc.WS_EX_TRANSPARENT)
+        if in_content and not has_t:
+            u32.SetWindowLongW(self._hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
+        elif not in_content and has_t:
+            u32.SetWindowLongW(self._hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT)
+        self._zone_poll_id = self.root.after(50, self._zone_transparency_poll)
 
     def _on_frame(self, img) -> None:
         """Runs on the Tk main thread, called only from _poll_frame_queue.
@@ -983,144 +775,21 @@ class BubbleWindow:
             self._canvas.itemconfig(self._image_id, image=self._photo)
         self._photo.paste(img)
 
-    # ---- Magnification API (preferred renderer — captures popup menus) ----
-
-    def _mag_init(self) -> bool:
-        """Initialise the Windows Magnification API and create a Magnifier
-        child window that covers the content zone of the bubble.
-
-        The Magnifier class is a DWM-level compositor that captures the
-        desktop *before* our overlay is composited, so popup menus and
-        other always-on-top windows appear correctly magnified.  We call
-        MagSetWindowFilterList to exclude self._hwnd from the magnified
-        view (anti-hall-of-mirrors).
-
-        Returns True on success; caller falls back to the mss path on False.
-        """
-        try:
-            import ctypes as _ct
-            from ctypes import wintypes as _wt
-
-            _mag = _ct.WinDLL("magnification.dll")
-            _mag.MagInitialize.restype = _ct.c_bool
-            if not _mag.MagInitialize():
-                print("[mag] MagInitialize returned False", flush=True)
-                return False
-
-            snap = self.state.snapshot()
-            _cx = BORDER_WIDTH
-            _cy = DRAG_STRIP_HEIGHT
-            _cw = snap.w - 2 * BORDER_WIDTH
-            _ch = snap.h - DRAG_STRIP_HEIGHT - CONTROL_STRIP_HEIGHT
-
-            _WS_CHILD   = 0x40000000
-            _WS_VISIBLE = 0x10000000
-            _u32 = _ct.windll.user32
-            hwnd_mag = _u32.CreateWindowExW(
-                0, "Magnifier", "",
-                _WS_CHILD | _WS_VISIBLE,
-                _cx, _cy, _cw, _ch,
-                self._hwnd,   # parent: outer wrapper above the Tk frame
-                None, None, None,
-            )
-            if not hwnd_mag:
-                _mag.MagUninitialize()
-                print("[mag] CreateWindowExW(Magnifier) failed", flush=True)
-                return False
-
-            # Exclude our overlay from magnification to prevent hall-of-mirrors.
-            # MW_FILTERMODE_EXCLUDE = 1
-            _mag.MagSetWindowFilterList.argtypes = [
-                _wt.HWND, _ct.c_uint32, _ct.c_int, _ct.POINTER(_wt.HWND)
-            ]
-            _hwnd_arr = (_wt.HWND * 1)(self._hwnd)
-            _mag.MagSetWindowFilterList(hwnd_mag, 1, 1, _hwnd_arr)
-
-            # Wire argtypes for hot-path calls (avoids repeated inference).
-            _mag.MagSetWindowTransform.argtypes = [
-                _wt.HWND, _ct.POINTER(_MAGTRANSFORM)
-            ]
-            _mag.MagSetWindowTransform.restype = _ct.c_bool
-            _mag.MagSetWindowSource.argtypes = [_wt.HWND, _wt.RECT]
-            _mag.MagSetWindowSource.restype = _ct.c_bool
-
-            self._hwnd_mag = hwnd_mag
-            self._mag_dll  = _mag
-            print(f"[mag] Magnifier hwnd={hwnd_mag:#010x}", flush=True)
-            return True
-
-        except Exception as exc:
-            print(f"[mag] init failed: {exc}", flush=True)
-            return False
-
-    def _mag_set_transform(self, zoom: float) -> None:
-        """Push a new zoom transform to the Magnifier window."""
-        t = _MAGTRANSFORM()
-        t.v[0][0] = zoom
-        t.v[1][1] = zoom
-        t.v[2][2] = 1.0
-        self._mag_dll.MagSetWindowTransform(self._hwnd_mag, ctypes.byref(t))
-
-    def _mag_tick(self) -> None:
-        """60-fps main-thread timer: sync Magnifier position/size/source from
-        current AppState.  Replaces the mss CaptureWorker + _poll_frame_queue
-        pipeline when the Magnification API is active.
-        """
-        if not self._hwnd_mag or self._mag_dll is None:
-            return
-
-        import ctypes as _ct
-        from ctypes import wintypes as _wt
-
-        snap = self.state.snapshot()
-        zoom = snap.zoom
-
-        # Resize Magnifier child if the bubble was resized.
-        _cw = snap.w - 2 * BORDER_WIDTH
-        _ch = snap.h - DRAG_STRIP_HEIGHT - CONTROL_STRIP_HEIGHT
-        if (_cw, _ch) != self._mag_last_wh:
-            _ct.windll.user32.MoveWindow(
-                self._hwnd_mag, BORDER_WIDTH, DRAG_STRIP_HEIGHT, _cw, _ch, True
-            )
-            self._mag_last_wh = (_cw, _ch)
-
-        # Update transform only when zoom changes.
-        if zoom != self._mag_last_zoom:
-            self._mag_set_transform(zoom)
-            self._mag_last_zoom = zoom
-
-        # Update source rectangle every tick (window may have moved).
-        _src_x = snap.x + (snap.w - snap.w / zoom) / 2
-        _src_y = snap.y + (snap.h - snap.h / zoom) / 2
-        _rect = _wt.RECT(
-            int(_src_x), int(_src_y),
-            int(_src_x + snap.w / zoom), int(_src_y + snap.h / zoom),
-        )
-        self._mag_dll.MagSetWindowSource(self._hwnd_mag, _rect)
-
-        self.root.after(16, self._mag_tick)
-
     def start_capture(self) -> None:
-        """Start the rendering pipeline.  Tries the Windows Magnification API
-        first — it captures at the DWM level so popup menus and other always-
-        on-top windows are visible in the zoom view.  Falls back to the mss
-        CaptureWorker if the Magnification API is unavailable.
+        """Start the DXGI Desktop Duplication capture pipeline.
 
-        Safe to call more than once (no-op on repeated calls).
+        Uses DXGICaptureWorker (dxcam) — the only capture path after Phase 7.
+        The Magnification API path is removed. Safe to call more than once (no-op).
         """
-        if self._capture_worker is not None or self._hwnd_mag:
+        if self._capture_worker is not None:
             return
-        if sys.platform == "win32" and self._mag_init():
-            self._mag_tick()   # kick off 60-fps update loop
-            return
-        # mss fallback: the capture thread puts PIL Images into _frame_queue;
-        # _poll_frame_queue drains them on the main thread via root.after.
-        self._capture_worker = CaptureWorker(
+        from magnifier_bubble.capture_dxgi import DXGICaptureWorker
+        self._capture_worker = DXGICaptureWorker(
             state=self.state,
-            on_frame=self._frame_queue.put,  # thread-safe; no Tk calls
+            on_frame=self._frame_queue.put,
         )
         self._capture_worker.start()
-        self._poll_frame_queue()  # start the main-thread display loop
+        self._poll_frame_queue()
 
     # ---- Theme support ----
 
@@ -1175,289 +844,10 @@ class BubbleWindow:
         self._canvas.itemconfig(self._resize_btn_text_id, fill=bc)
 
     def _on_canvas_rclick(self, event) -> None:
-        """Right-click dispatch:
-          - Top strip  → cycle color theme.
-          - Content zone → pass right-click through to app below.
-          - Bottom strip → no-op (our control area).
-
-        Content-zone strategy: temporarily add WS_EX_TRANSPARENT so the
-        overlay stays fully visible (no flicker) but mouse input falls through
-        to whatever is beneath.  send_rclick_at injects the right-click and
-        atomically restores the cursor position in the same SendInput batch
-        (sub-frame, imperceptible).  _poll_menu_restore races the overlay above
-        the resulting popup so the Magnification API can show it zoomed.
-        """
+        """Right-click top strip to cycle color theme."""
         if event.y < DRAG_STRIP_HEIGHT:
             self._apply_theme(self._theme_idx + 1)
             self._save_theme()
-            return
-        _h = self.root.winfo_height()
-        if (
-            self._click_injection_enabled
-            and sys.platform == "win32"
-            and self._hwnd
-            and DRAG_STRIP_HEIGHT <= event.y < (_h - CONTROL_STRIP_HEIGHT)
-        ):
-            from magnifier_bubble.clickthru import inject_right_click
-            import ctypes as _ct
-            _u32 = _ct.windll.user32  # type: ignore[attr-defined]
-            snap = self.state.snapshot()
-            zoom = snap.zoom
-            src_x = snap.x + (snap.w - snap.w / zoom) / 2
-            src_y = snap.y + (snap.h - snap.h / zoom) / 2
-            actual_x = round(src_x + event.x / zoom)
-            actual_y = round(src_y + (event.y - DRAG_STRIP_HEIGHT) / zoom)
-            # Clear any stale menu state from a previous right-click so a
-            # fresh _poll_menu_restore chain starts without interference.
-            self._active_menu_hwnd = 0
-            self._active_menu_cls = ""
-            self._active_menu_skip_zorder = False
-            # Store screen coords so _poll_menu_restore can proximity-filter
-            # newly appeared popup windows.
-            self._rclick_screen_x = actual_x
-            self._rclick_screen_y = actual_y
-            # PostMessageW directly to the window below — identical pattern to
-            # inject_click for left-clicks.  No WS_EX_TRANSPARENT toggling
-            # needed: PostMessageW targets the window by HWND identity and
-            # bypasses OS hit-testing entirely.  The previous send_rclick_at
-            # (SendInput + WS_EX_TRANSPARENT) was broken because the Canvas
-            # child HWND returns HTCLIENT, routing SendInput events back to
-            # us instead of the target.
-            inject_right_click(actual_x, actual_y, self._hwnd)
-            # _poll_menu_restore detects the resulting context-menu popup,
-            # manages Z-order so the Magnifier API can show it, and sets
-            # _active_menu_hwnd so _on_canvas_press routes left-clicks to
-            # the menu via PostMessageW (not inject_click's Z-order walk,
-            # which could land on a full-screen desktop HWND instead).
-            _raw = _u32.GetWindowLongW(self._hwnd, wc.GWL_EXSTYLE)
-            _saved = _raw & ~wc.WS_EX_TRANSPARENT
-            self.root.after(
-                16,
-                lambda: self._poll_menu_restore(_u32, self._hwnd, _saved),
-            )
-
-    def _poll_menu_restore(
-        self,
-        u32,
-        hwnd,
-        saved_exstyle: int,
-        attempts: int = 0,
-        seen: bool = False,
-    ) -> None:
-        """Poll for the context-menu popup and manage overlay Z-order.
-
-        Detection is two-tier:
-          1. FindWindowW on known classes (#32768, CoreWindow) — fast path.
-          2. EnumWindows proximity search — class-agnostic fallback that
-             catches WinUI3/Chrome menus which reuse pre-existing HWNDs.
-
-        Z-order: overlay is re-asserted at HWND_TOPMOST.  Classic Win32 /
-        Chrome / Firefox menus are pushed just below us so the Magnification
-        API captures them in the source-rect view.  WinUI3 PopupWindowSiteBridge
-        (File Explorer) and desktop shell menus (Progman/WorkerW owned) are
-        dismissed by any SetWindowPos call on their HWND, so we skip the push
-        for them — they appear unmagnified above or near the overlay instead.
-
-        WS_EX_TRANSPARENT is removed as soon as the menu is first detected so
-        that left-clicks are received by Tk and forwarded via inject_click with
-        zoom-mapped coordinates (clicking the correct menu item).
-        """
-        _GRACE = 40    # 40 × 50 ms = 2 s grace period before first detection
-        _MAX   = 600   # 600 × 50 ms = 30 s max — user may read menu slowly
-        # SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE
-        _SWP   = 0x0001 | 0x0002 | 0x0010
-
-        # Fast path once the menu has been found: skip the expensive detection
-        # (FindWindowW + EnumWindows) and just check if the known HWND is still
-        # visible.  Cuts per-tick cost from ~2 ms to ~0.1 ms while menu is open.
-        if seen and self._active_menu_hwnd:
-            import ctypes as _ct
-            _u32c = _ct.windll.user32
-            _still_up = bool(_u32c.IsWindowVisible(self._active_menu_hwnd))
-            if _still_up:
-                u32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, _SWP)
-                # For WinUI3 PopupWindowSiteBridge (desktop / File Explorer
-                # context menus): do NOT push the menu below us — even a single
-                # SetWindowPos call on those HWNDs triggers an immediate dismissal.
-                # For classic Win32 / Chrome / Firefox menus: push below us every
-                # tick so the Magnifier API can show them (DWM composes them into
-                # the source rect only when they are below our overlay in Z-order).
-                if not self._active_menu_skip_zorder:
-                    u32.SetWindowPos(self._active_menu_hwnd, hwnd, 0, 0, 0, 0, _SWP)
-                if attempts < _MAX:
-                    self.root.after(
-                        50,
-                        lambda: self._poll_menu_restore(
-                            u32, hwnd, saved_exstyle, attempts + 1, True
-                        ),
-                    )
-                else:
-                    self._active_menu_hwnd = 0
-                    self._active_menu_cls = ""
-                    self._active_menu_skip_zorder = False
-            else:
-                try:
-                    from magnifier_bubble.clickthru import _dbg
-                    _dbg(f"poll_menu: DISMISSED attempts={attempts}")
-                except Exception:
-                    pass
-                u32.SetWindowLongW(hwnd, wc.GWL_EXSTYLE, saved_exstyle)
-                self._active_menu_hwnd = 0
-                self._active_menu_cls = ""
-                self._active_menu_skip_zorder = False
-            return
-
-        menu_hwnd = 0
-        try:
-            import ctypes as _ct
-            from ctypes import wintypes as _wt
-            _u32c = _ct.windll.user32
-            # #32768 is the Win32 popup-menu class used by all shell context
-            # menus (File Explorer, desktop, etc.).  CoreWindow / other XAML
-            # classes are intentionally excluded — they match persistent Windows
-            # 11 system-UI windows (Start, Widgets, Notification Center) and
-            # would leave WS_EX_TRANSPARENT stuck on forever.
-            _h = _u32c.FindWindowW("#32768", None)
-            # Accept the topmost #32768 window unconditionally — FindWindowW
-            # returns the topmost Z-order match, which is our freshly created
-            # menu after a right-click.  Any alien persistent window from
-            # another app sits lower in Z-order and is skipped by the API.
-            # known_hwnds filtering here was too aggressive: Windows shell
-            # reuses a hidden #32768 window (already in the EnumWindows snapshot)
-            # rather than creating a fresh HWND, so the filter incorrectly
-            # rejected the desktop right-click menu.
-            if _h:
-                menu_hwnd = int(_h)
-            # Fallback: proximity search — find the topmost visible WS_POPUP
-            # within ~200 px of where the right-click landed.  We do NOT use a
-            # known_hwnds diff because Chrome and WinUI3 reuse pre-existing
-            # hidden popup HWNDs (same pattern as the shell's #32768 reuse):
-            # those HWNDs would be in the diff snapshot and therefore skipped,
-            # causing detection to fail for 1-2 seconds.
-            if not menu_hwnd:
-                _cx    = getattr(self, '_rclick_screen_x', 0)
-                _cy    = getattr(self, '_rclick_screen_y', 0)
-                _own   = int(hwnd)
-                _MRG   = 200   # px slack — menus often appear offset from cursor
-                _WS_POPUP  = 0x80000000
-                _GWL_STYLE = -16
-                _best  = [0]
-                _CB2   = _ct.WINFUNCTYPE(_ct.c_bool, _wt.HWND, _wt.LPARAM)
-                def _chk2(h, _lp):
-                    _hi = int(h)
-                    if _hi == _own or _best[0]:
-                        return True
-                    if _u32c.IsWindowVisible(h):
-                        _sty = _u32c.GetWindowLongW(h, _GWL_STYLE)
-                        if _sty & _WS_POPUP:
-                            _r = _wt.RECT()
-                            _u32c.GetWindowRect(h, _ct.byref(_r))
-                            _w  = _r.right  - _r.left
-                            _hh = _r.bottom - _r.top
-                            if 20 < _w < 1200 and 20 < _hh < 1200:
-                                if (
-                                    _r.left - _MRG <= _cx <= _r.right  + _MRG
-                                    and _r.top  - _MRG <= _cy <= _r.bottom + _MRG
-                                ):
-                                    _best[0] = _hi
-                    return True
-                _cb2_obj = _CB2(_chk2)
-                _u32c.EnumWindows(_cb2_obj, 0)
-                if _best[0]:
-                    menu_hwnd = _best[0]
-        except Exception:
-            menu_hwnd = 0
-
-        menu_up = bool(menu_hwnd)
-
-        if menu_up:
-            if not seen:
-                # Capture the menu class NOW (outside logging try-block) so
-                # we can store it for Z-order and _on_canvas_press decisions.
-                try:
-                    _cls_buf2 = _ct.create_unicode_buffer(128)
-                    _u32c.GetClassNameW(_ct.c_void_p(menu_hwnd), _cls_buf2, 128)
-                    _detected_cls = _cls_buf2.value
-                except Exception:
-                    _detected_cls = ""
-                self._active_menu_cls = _detected_cls
-                # Determine whether SetWindowPos on this menu HWND would
-                # dismiss it immediately.  Two known dismiss-on-SWP cases:
-                #   1. WinUI3 PopupWindowSiteBridge (File Explorer menus)
-                #   2. Desktop shell #32768 menus owned by Progman / WorkerW
-                # Classic Chrome / Firefox / Win32 app menus are safe to push.
-                _skip_z = "PopupWindowSiteBridge" in _detected_cls
-                if not _skip_z:
-                    try:
-                        _GW_OWNER = 4
-                        _ow = _u32c.GetWindow(_ct.c_void_p(menu_hwnd), _GW_OWNER)
-                        if _ow:
-                            _ob = _ct.create_unicode_buffer(64)
-                            _u32c.GetClassNameW(_ct.c_void_p(_ow), _ob, 64)
-                            if _ob.value in ("Progman", "WorkerW", "SHELLDLL_DefView"):
-                                _skip_z = True
-                    except Exception:
-                        pass
-                self._active_menu_skip_zorder = _skip_z
-                try:
-                    from magnifier_bubble.clickthru import _dbg
-                    _dbg(
-                        f"poll_menu: DETECTED hwnd={menu_hwnd} cls={_detected_cls!r}"
-                        f" skip_zorder={_skip_z} attempts={attempts}"
-                    )
-                except Exception:
-                    pass
-            # Assert our overlay at absolute top of topmost band.
-            u32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, _SWP)
-            # Selective Z-order fix: push classic Win32 / Chrome / Firefox menus
-            # below us so the Magnifier API shows them in the source-rect view.
-            # WinUI3 PopupWindowSiteBridge and desktop shell menus (Progman/
-            # WorkerW owned) are dismissed by SetWindowPos — skip for them.
-            if not self._active_menu_skip_zorder:
-                u32.SetWindowPos(menu_hwnd, hwnd, 0, 0, 0, 0, _SWP)
-            # Remove WS_EX_TRANSPARENT immediately so subsequent left-clicks
-            # are received by Tk and dispatched through _on_canvas_press.
-            u32.SetWindowLongW(hwnd, wc.GWL_EXSTYLE, saved_exstyle)
-            self._active_menu_hwnd = menu_hwnd
-            if attempts < _MAX:
-                self.root.after(
-                    50,
-                    lambda: self._poll_menu_restore(
-                        u32, hwnd, saved_exstyle, attempts + 1, True
-                    ),
-                )
-            else:
-                # Polling budget exhausted — menu still visible but give up.
-                self._active_menu_hwnd = 0
-                self._active_menu_cls = ""
-                self._active_menu_skip_zorder = False
-            return
-
-        if not seen:
-            if attempts < _GRACE:
-                self.root.after(
-                    50,
-                    lambda: self._poll_menu_restore(
-                        u32, hwnd, saved_exstyle, attempts + 1, False
-                    ),
-                )
-                return
-            u32.SetWindowLongW(hwnd, wc.GWL_EXSTYLE, saved_exstyle)
-            self._active_menu_hwnd = 0
-            self._active_menu_cls = ""
-            self._active_menu_skip_zorder = False
-            return
-
-        # menu_up=False, seen=True: dismissed — restore.
-        try:
-            from magnifier_bubble.clickthru import _dbg
-            _dbg(f"poll_menu: DISMISSED attempts={attempts}")
-        except Exception:
-            pass
-        u32.SetWindowLongW(hwnd, wc.GWL_EXSTYLE, saved_exstyle)
-        self._active_menu_hwnd = 0
-        self._active_menu_cls = ""
-        self._active_menu_skip_zorder = False
 
     # ---- Public teardown ----
 
@@ -1472,6 +862,25 @@ class BubbleWindow:
         root.after(0, ...) here; the scheduled callback would never fire.
         """
         try:
+            # Phase 7: cancel zone transparency poll BEFORE root.destroy()
+            if self._zone_poll_id is not None:
+                try:
+                    self.root.after_cancel(self._zone_poll_id)
+                except Exception:
+                    pass
+                self._zone_poll_id = None
+            # Phase 7: cancel frame queue poll BEFORE root.destroy()
+            if self._poll_frame_queue_id is not None:
+                try:
+                    self.root.after_cancel(self._poll_frame_queue_id)
+                except Exception:
+                    pass
+                self._poll_frame_queue_id = None
+            # Phase 7: clear WS_EX_TRANSPARENT so WM_DELETE_WINDOW is delivered
+            if sys.platform == "win32" and self._hwnd:
+                u32_d = ctypes.windll.user32  # type: ignore[attr-defined]
+                cur_d = u32_d.GetWindowLongW(self._hwnd, wc.GWL_EXSTYLE)
+                u32_d.SetWindowLongW(self._hwnd, wc.GWL_EXSTYLE, cur_d & ~wc.WS_EX_TRANSPARENT)
             # Phase 5 PERS-04: flush debounced config write SYNC, before
             # anything else in the teardown chain.  Wrapped in its own
             # try so a writer bug cannot block capture/WndProc teardown.
@@ -1505,14 +914,6 @@ class BubbleWindow:
                 self._capture_worker.stop()
                 self._capture_worker.join(timeout=1.0)
                 self._capture_worker = None
-            # Magnification API cleanup (if _mag_init succeeded).
-            if self._mag_dll is not None:
-                try:
-                    self._mag_dll.MagUninitialize()
-                except Exception:
-                    pass
-                self._mag_dll = None
-                self._hwnd_mag = 0
             # Uninstall innermost WndProcs first (canvas → frame → parent)
             # so each HWND's chain is restored while all HWNDs are still valid.
             if self._canvas_wndproc_keepalive is not None:

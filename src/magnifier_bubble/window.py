@@ -649,6 +649,16 @@ class BubbleWindow:
                     _lp = ctypes.c_long((_cpt.y << 16) | (_cpt.x & 0xFFFF)).value
                     _u32c.PostMessageW(_target, 0x0201, 1, _lp)  # WM_LBUTTONDOWN
                     _u32c.PostMessageW(_target, 0x0202, 0, _lp)  # WM_LBUTTONUP
+                    # Transfer foreground to target app so keyboard input
+                    # reaches the clicked control.  Our process is
+                    # input-qualified (we just received WM_LBUTTONDOWN)
+                    # so SetForegroundWindow succeeds cross-process.
+                    # GA_ROOT=2 walks up to the top-level owner window.
+                    _u32c.GetAncestor.argtypes = [
+                        ctypes.wintypes.HWND, ctypes.c_uint]
+                    _u32c.GetAncestor.restype = ctypes.wintypes.HWND
+                    _root = _u32c.GetAncestor(_target, 2)
+                    _u32c.SetForegroundWindow(_root or _target)
 
     def _on_canvas_drag(self, event) -> None:
         """Phase 4 amended: resize drag takes precedence over move drag.

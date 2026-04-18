@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 08 complete — 08-02-PLAN.md Task 2 human verification approved with notes. All TRAY-01..05 requirements met. Ready for Phase 9 (Build and Package).
-last_updated: "2026-04-18T03:48:33.083Z"
+stopped_at: "Completed 09-01-PLAN.md (Build artifacts: spec hardened with PIL._tkinter_finder + win32timezone, build.bat created, README.md written, .gitignore extended; 8 structural lint tests all GREEN; 302 passed zero regressions)"
+last_updated: "2026-04-18T13:16:40.048Z"
 progress:
   total_phases: 9
   completed_phases: 7
-  total_plans: 22
-  completed_plans: 21
+  total_plans: 24
+  completed_plans: 22
   percent: 85
 ---
 
@@ -34,12 +34,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Clicks and touches pass through the magnified content area to whatever app is underneath — the bubble enhances vision without blocking the workflow.
-**Current focus:** Phase 09 — packaging
+**Current focus:** Phase 09 — build-and-package
 
 ## Current Position
 
-Phase: 08 (system-tray) — COMPLETE
-Next: Phase 09 (build-and-package)
+Phase: 09 (build-and-package) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -91,6 +91,7 @@ Next: Phase 09 (build-and-package)
 | Phase 07 P03 | 5 | 1 tasks | 3 files |
 | Phase 08 P01 | 5 | 2 tasks | 3 files |
 | Phase 08 P02 | ~10 + human-verify | 2 tasks (1 auto + 1 human-verify approved-with-notes) | 3 files |
+| Phase 09 P01 | 8 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -194,6 +195,9 @@ Recent decisions affecting current work:
 - [Phase 08-system-tray]: tray_manager.stop() slots between hotkey_manager.stop() and capture_worker.stop() — same ordering contract prevents late tray callbacks on a partially-torn-down Tk root
 - [Phase 08-system-tray]: 5th occurrence of docstring-contains-banned-literal bug: literal 'root.destroy()' in 3 window.py docstring/comment lines tripped test_tray_stop_before_destroy_ordering src.find() lint — all src.find()-based ordering lints apply to entire file source including docstrings
 - [Phase 08-system-tray]: PHASE 08 COMPLETE — All 5 TRAY-* requirements (TRAY-01..05) verified on real Windows 11 hardware. Human verification approved with notes: icon swap to eye/favicon is a future enhancement; Chrome right-click z-order and left-click inaccuracy after right-click are pre-existing issues not introduced by Phase 8.
+- [Phase 09]: build.bat uses python -m PyInstaller (not bare pyinstaller) to avoid PATH issues with project venv
+- [Phase 09]: README tone: plain English for clinic staff, not technical CLI jargon
+- [Phase 09]: test_gitignore checks .claude/ and .remember/ to prevent agent scaffolding from being pushed to public GitHub
 
 ### Pending Todos
 
@@ -213,8 +217,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-17T00:00:00.000Z
-Stopped at: Phase 08 complete — 08-02-PLAN.md Task 2 human verification approved with notes. All TRAY-01..05 requirements met. Ready for Phase 9 (Build and Package).
+Last session: 2026-04-18T13:16:40.042Z
+Stopped at: Completed 09-01-PLAN.md (Build artifacts: spec hardened with PIL._tkinter_finder + win32timezone, build.bat created, README.md written, .gitignore extended; 8 structural lint tests all GREEN; 302 passed zero regressions)
 Resume file: None
 
 Next step: `/gsd:plan-phase 09` (build-and-package — PyInstaller single-file EXE, build.bat, README, push to GitHub). Phase 8 future enhancement noted: icon swap to eye/favicon design. Pre-existing issues (not Phase 8 gaps): Chrome right-click z-order above zoom bubble; left-click inaccuracy after right-click.

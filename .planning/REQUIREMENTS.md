@@ -68,11 +68,11 @@
 
 ### Build and Deployment
 
-- [ ] **BULD-01**: requirements.txt with pinned versions provided
-- [ ] **BULD-02**: PyInstaller .spec file checked into repo; includes hiddenimports=['pystray._win32', 'PIL._tkinter_finder', 'win32timezone'] and upx=False
-- [ ] **BULD-03**: build.bat script compiles app to a single portable .exe with no external dependencies
+- [x] **BULD-01**: requirements.txt with pinned versions provided
+- [x] **BULD-02**: PyInstaller .spec file checked into repo; includes hiddenimports=['pystray._win32', 'PIL._tkinter_finder', 'win32timezone'] and upx=False
+- [x] **BULD-03**: build.bat script compiles app to a single portable .exe with no external dependencies
 - [ ] **BULD-04**: Output .exe runs on clinic PC without Python installed
-- [ ] **BULD-05**: README.md with plain-English step-by-step setup for a non-technical user (how to install Python, install dependencies, run from source, and run the .exe)
+- [x] **BULD-05**: README.md with plain-English step-by-step setup for a non-technical user (how to install Python, install dependencies, run from source, and run the .exe)
 - [ ] **BULD-06**: Code pushed to GitHub repo: https://github.com/fresh-start-git/Ultimate-Zoom.git
 
 ## v2 Requirements
@@ -149,11 +149,11 @@
 | PERS-02 | Phase 5 | Complete |
 | PERS-03 | Phase 5 | Complete |
 | PERS-04 | Phase 5 | Complete |
-| BULD-01 | Phase 8 | Pending |
-| BULD-02 | Phase 8 | Pending |
-| BULD-03 | Phase 8 | Pending |
+| BULD-01 | Phase 8 | Complete |
+| BULD-02 | Phase 8 | Complete |
+| BULD-03 | Phase 8 | Complete |
 | BULD-04 | Phase 8 | Pending |
-| BULD-05 | Phase 8 | Pending |
+| BULD-05 | Phase 8 | Complete |
 | BULD-06 | Phase 8 | Pending |
 
 **Coverage:**

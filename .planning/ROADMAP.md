@@ -175,7 +175,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Global Hotkey | 4/4 | Complete | 2026-04-16 |
 | 7. DXGI Capture + Transparent Input | 3/3 | Complete   | 2026-04-18 |
 | 8. System Tray | 2/2 | Complete | 2026-04-17 |
-| 9. Build and Package | 0/2 | Not started | - |
+| 9. Build and Package | 1/2 | In Progress|  |
 
 ## Coverage
 

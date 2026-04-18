@@ -604,13 +604,7 @@ class BubbleWindow:
                 self.root.winfo_x(), self.root.winfo_y(),
             )
             return
-        # Content zone: inject via real hardware events (SendInput).
-        # WS_EX_TRANSPARENT on our parent HWND excludes the entire overlay
-        # tree from hardware event routing — the click lands on the target
-        # window below and Windows handles focus transfer automatically.
-        # This is more reliable than PostMessageW for focus (no AttachThreadInput
-        # needed) and works for all targets: standard controls, system menus,
-        # DirectUI, WebView2.
+        # Content zone: compute zoom-corrected target position then inject click.
         if sys.platform == "win32":
             snap = self.state.snapshot()
             src_x = snap.x + (snap.w - snap.w / snap.zoom) / 2
@@ -618,18 +612,43 @@ class BubbleWindow:
             actual_x = round(src_x + event.x / snap.zoom)
             actual_y = round(src_y + (event.y - DRAG_STRIP_HEIGHT) / snap.zoom)
             _u32c = ctypes.windll.user32  # type: ignore[attr-defined]
+            _u32c.WindowFromPoint.argtypes = [ctypes.wintypes.POINT]
+            _u32c.WindowFromPoint.restype = ctypes.wintypes.HWND
+            _u32c.ScreenToClient.argtypes = [
+                ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.POINT)]
+            _u32c.ScreenToClient.restype = ctypes.wintypes.BOOL
+            _u32c.PostMessageW.argtypes = [
+                ctypes.wintypes.HWND, ctypes.wintypes.UINT,
+                ctypes.wintypes.WPARAM, ctypes.wintypes.LPARAM]
+            _u32c.PostMessageW.restype = ctypes.wintypes.BOOL
             _hwnd = self._hwnd
             cur_ex = _u32c.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
+            # Briefly make overlay transparent so WindowFromPoint finds the
+            # target below us, then restore immediately (PostMessageW is sync).
             _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
-            # Release implicit mouse capture acquired when WM_LBUTTONDOWN hit
-            # our canvas — without this, SendInput events route back to us.
-            _u32c.ReleaseCapture()
-            from magnifier_bubble.clickthru import send_lclick_at
-            send_lclick_at(actual_x, actual_y)
-            # Restore after 16 ms — SendInput is asynchronous and the events
-            # must be processed while the window is still transparent.
-            _saved = cur_ex
-            self.root.after(16, lambda: _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, _saved))
+            _target = _u32c.WindowFromPoint(ctypes.wintypes.POINT(actual_x, actual_y))
+            _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT)
+            if _target and _target != _hwnd:
+                # Check window class — #32768 system menus use a modal pump
+                # that ignores PostMessageW; they need real SendInput events.
+                _cls_buf = ctypes.create_unicode_buffer(256)
+                ctypes.windll.user32.GetClassNameW(_target, _cls_buf, 256)
+                if _cls_buf.value == "#32768":
+                    _u32c.SetWindowLongW(
+                        _hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
+                    _u32c.ReleaseCapture()
+                    from magnifier_bubble.clickthru import send_lclick_at
+                    send_lclick_at(actual_x, actual_y)
+                    _saved = cur_ex
+                    self.root.after(
+                        16, lambda: _u32c.SetWindowLongW(
+                            _hwnd, wc.GWL_EXSTYLE, _saved))
+                else:
+                    _cpt = ctypes.wintypes.POINT(actual_x, actual_y)
+                    _u32c.ScreenToClient(_target, ctypes.byref(_cpt))
+                    _lp = ctypes.c_long((_cpt.y << 16) | (_cpt.x & 0xFFFF)).value
+                    _u32c.PostMessageW(_target, 0x0201, 1, _lp)  # WM_LBUTTONDOWN
+                    _u32c.PostMessageW(_target, 0x0202, 0, _lp)  # WM_LBUTTONUP
 
     def _on_canvas_drag(self, event) -> None:
         """Phase 4 amended: resize drag takes precedence over move drag.

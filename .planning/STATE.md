@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Completed 08-01-PLAN.md (TrayManager + create_tray_image: non-daemon thread, pystray, PIL, all 3 callbacks via root.after(0,...); 8/9 structural lints green, both smoke tests pass; 293 passed, 1 expected deferred failure for Plan 02 window.py wiring)"
-last_updated: "2026-04-18T03:19:19.157Z"
+stopped_at: "Paused at 08-02-PLAN.md Task 2 checkpoint (human-verify): TrayManager wired into window.py+app.py+spec; 9/9 test_tray.py pass; 294 total pass; awaiting 5-step manual verification of live tray icon, menu, AoT toggle, clean exit"
+last_updated: "2026-04-18T03:25:42.268Z"
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 22
-  completed_plans: 20
+  completed_plans: 21
   percent: 85
 ---
 
@@ -190,6 +190,8 @@ Recent decisions affecting current work:
 - [Phase 08]: daemon=False on TrayManager thread: guarantees icon.stop() finalizer runs on interpreter exit, preventing orphaned tray icons (Pitfall T-6)
 - [Phase 08]: Docstrings must not contain literal banned API names: module docstring 'root.destroy()' tripped structural lint — 4th occurrence of this class of bug (prior: Phase 2-02 LOWORD/HIWORD, Phase 4-03 SendMessageW/PyDLL, Phase 5-01 threading.Timer)
 - [Phase 08]: Tooltip: 'NomisLens — Ctrl+Alt+Z to toggle' surfaces hotkey to clinic users (Research open question 3 resolved)
+- [Phase 08-system-tray]: tray_manager.stop() slots between hotkey_manager.stop() and capture_worker.stop() — same ordering contract prevents late tray callbacks on a partially-torn-down Tk root
+- [Phase 08-system-tray]: 5th occurrence of docstring-contains-banned-literal bug: literal 'root.destroy()' in 3 window.py docstring/comment lines tripped test_tray_stop_before_destroy_ordering src.find() lint — all src.find()-based ordering lints apply to entire file source including docstrings
 
 ### Pending Todos
 
@@ -209,8 +211,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-18T03:19:19.150Z
-Stopped at: Completed 08-01-PLAN.md (TrayManager + create_tray_image: non-daemon thread, pystray, PIL, all 3 callbacks via root.after(0,...); 8/9 structural lints green, both smoke tests pass; 293 passed, 1 expected deferred failure for Plan 02 window.py wiring)
+Last session: 2026-04-18T03:25:31.205Z
+Stopped at: Paused at 08-02-PLAN.md Task 2 checkpoint (human-verify): TrayManager wired into window.py+app.py+spec; 9/9 test_tray.py pass; 294 total pass; awaiting 5-step manual verification of live tray icon, menu, AoT toggle, clean exit
 Resume file: None
 
 Next step: `/gsd:plan-phase 08` (system tray — tray icon, Show/Hide menu item, right-click tray menu). Multi-monitor support deferred per user decision 2026-04-17. OPEN: close button on bubble (overlay dismissable without tray). Tk init.tcl path errors in bash shell are a pre-existing env artifact (not test failures); EXE and normal Windows launch unaffected.

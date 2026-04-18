@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Controls, Shape, Resize** - Zoom buttons, shape cycling, resize grip, touch-sized hit targets (completed 2026-04-13)
 - [x] **Phase 5: Config Persistence** - Position, size, zoom, shape saved to config.json and restored on launch (completed 2026-04-13)
 - [x] **Phase 6: Global Hotkey** - Ctrl+Alt+Z toggles bubble visibility even when Cornerstone has focus (completed 2026-04-16)
-- [ ] **Phase 7: DXGI Capture + Transparent Input** - Replace Magnification API with DXGI Desktop Duplication so all menus (Chrome, Win11 shell, Cornerstone) are captured; replace click injection with WS_EX_TRANSPARENT content zone so all input passes through naturally
+- [x] **Phase 7: DXGI Capture + Transparent Input** - Replace Magnification API with DXGI Desktop Duplication so all menus (Chrome, Win11 shell, Cornerstone) are captured; replace click injection with WS_EX_TRANSPARENT content zone so all input passes through naturally (completed 2026-04-18)
 - [ ] **Phase 8: System Tray** - Tray icon with Show/Hide, Always-on-Top toggle, and Exit
 - [ ] **Phase 9: Build and Package** - Single portable .exe via PyInstaller, README, pushed to GitHub
 
@@ -169,7 +169,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Controls, Shape, Resize | 3/3 | Complete | 2026-04-13 |
 | 5. Config Persistence | 2/2 | Complete | 2026-04-13 |
 | 6. Global Hotkey | 4/4 | Complete | 2026-04-16 |
-| 7. DXGI Capture + Transparent Input | 2/3 | In Progress|  |
+| 7. DXGI Capture + Transparent Input | 3/3 | Complete   | 2026-04-18 |
 | 8. System Tray | 0/TBD | Not started | - |
 | 9. Build and Package | 0/TBD | Not started | - |
 

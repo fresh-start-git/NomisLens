@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Completed 07-02-PLAN.md (window.py surgery: removed ~500 lines Mag API + click injection, added 30-line WS_EX_TRANSPARENT zone poll + DXGICaptureWorker wiring; capture.py tombstoned; 6 files updated; all pre-existing failures confirmed pre-existing via stash verify)"
-last_updated: "2026-04-18T00:04:42.191Z"
+stopped_at: "Completed 07-03-PLAN.md (clickthru.py cleanup: deleted inject_click/inject_right_click/send_rclick_at, set _DEBUG_LOG=None, updated naomi_zoom.spec with dxcam hiddenimports, updated test_clickthru.py with 4 Phase 7 deletion tests; awaiting human verification checkpoint)"
+last_updated: "2026-04-18T00:16:24.649Z"
 progress:
   total_phases: 9
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 20
-  completed_plans: 18
+  completed_plans: 19
   percent: 85
 ---
 
@@ -88,6 +88,7 @@ Plan: 1 of 3
 | Phase 06 P03 | ~7 min | 2 tasks (zero deviations) | 4 files |
 | Phase 07 P01 | 19 | 3 tasks | 6 files |
 | Phase 07 P02 | 95 | 2 tasks | 6 files |
+| Phase 07 P03 | 5 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -183,6 +184,8 @@ Recent decisions affecting current work:
 - [Phase 07-02]: Zone poll replaces all click injection: _zone_transparency_poll sets WS_EX_TRANSPARENT when cursor enters content zone — no SendInput, PostMessageW, or ReleaseCapture needed
 - [Phase 07-02]: capture.py tombstoned with raise ImportError (not deleted) — preserves git history while blocking accidental CaptureWorker import
 - [Phase 07-02]: Both after-IDs (_zone_poll_id, _poll_frame_queue_id) stored and after_cancel'd in destroy() before root.destroy() — prevents Tk callbacks on partially torn-down tree
+- [Phase 07-03]: inject_click/inject_right_click/send_rclick_at deleted — Phase 7 WS_EX_TRANSPARENT zone poll makes all three obsolete
+- [Phase 07-03]: _DEBUG_LOG = None enforced by test_debug_log_disabled — ensures production build never writes zoom_log.txt
 
 ### Pending Todos
 
@@ -202,8 +205,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-18T00:04:42.184Z
-Stopped at: Completed 07-02-PLAN.md (window.py surgery: removed ~500 lines Mag API + click injection, added 30-line WS_EX_TRANSPARENT zone poll + DXGICaptureWorker wiring; capture.py tombstoned; 6 files updated; all pre-existing failures confirmed pre-existing via stash verify)
+Last session: 2026-04-18T00:16:24.642Z
+Stopped at: Completed 07-03-PLAN.md (clickthru.py cleanup: deleted inject_click/inject_right_click/send_rclick_at, set _DEBUG_LOG=None, updated naomi_zoom.spec with dxcam hiddenimports, updated test_clickthru.py with 4 Phase 7 deletion tests; awaiting human verification checkpoint)
 Resume file: None
 
 Next step: `/gsd:execute-plan 06-04` (manual verification checkpoint on the real dev box — press the configured hotkey, see the bubble toggle, confirm no collision with Cornerstone undo; if collision observed, switch default to Ctrl+Alt+Z in config.py _HOTKEY_DEFAULT and update VALIDATION.md). ALSO STILL OPEN: two UX gaps from Phase 05 verification — (a) no on-bubble close button (Phase 7 tray or small fix-up plan); (b) click-through not actually working in real use despite Phase 04-03 inject_click (proposed Phase 04-04 diagnostic plan). Pre-existing test failures in test_capture_smoke.py + test_window_integration.py + test_window_config_integration.py (TypeError 'Event' object not callable, 6 failed + 4 errors) tracked in .planning/phases/06-global-hotkey/deferred-items.md — also a Phase 04-04 candidate.

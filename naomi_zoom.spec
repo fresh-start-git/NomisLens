@@ -54,12 +54,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[
-        # Trim unused stdlib modules to keep the exe lean.
-        # xml excluded from this list — plistlib (via pkg_resources) needs it at runtime
-        'unittest', 'email', 'http', 'pydoc',
-        'doctest', 'difflib', 'multiprocessing',
-    ],
+    excludes=[],  # pkg_resources runtime hook needs xml/email/etc — don't exclude stdlib
     noarchive=False,
 )
 

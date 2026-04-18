@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Paused at 08-02-PLAN.md Task 2 checkpoint (human-verify): TrayManager wired into window.py+app.py+spec; 9/9 test_tray.py pass; 294 total pass; awaiting 5-step manual verification of live tray icon, menu, AoT toggle, clean exit"
-last_updated: "2026-04-18T03:25:42.268Z"
+stopped_at: Phase 08 complete — 08-02-PLAN.md Task 2 human verification approved with notes. All TRAY-01..05 requirements met. Ready for Phase 9 (Build and Package).
+last_updated: "2026-04-18T03:48:33.083Z"
 progress:
   total_phases: 9
   completed_phases: 7
@@ -34,12 +34,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Clicks and touches pass through the magnified content area to whatever app is underneath — the bubble enhances vision without blocking the workflow.
-**Current focus:** Phase 08 — system-tray
+**Current focus:** Phase 09 — packaging
 
 ## Current Position
 
-Phase: 08 (system-tray) — EXECUTING
-Plan: 1 of 2
+Phase: 08 (system-tray) — COMPLETE
+Next: Phase 09 (build-and-package)
 
 ## Performance Metrics
 
@@ -90,6 +90,7 @@ Plan: 1 of 2
 | Phase 07 P02 | 95 | 2 tasks | 6 files |
 | Phase 07 P03 | 5 | 1 tasks | 3 files |
 | Phase 08 P01 | 5 | 2 tasks | 3 files |
+| Phase 08 P02 | ~10 + human-verify | 2 tasks (1 auto + 1 human-verify approved-with-notes) | 3 files |
 
 ## Accumulated Context
 
@@ -192,6 +193,7 @@ Recent decisions affecting current work:
 - [Phase 08]: Tooltip: 'NomisLens — Ctrl+Alt+Z to toggle' surfaces hotkey to clinic users (Research open question 3 resolved)
 - [Phase 08-system-tray]: tray_manager.stop() slots between hotkey_manager.stop() and capture_worker.stop() — same ordering contract prevents late tray callbacks on a partially-torn-down Tk root
 - [Phase 08-system-tray]: 5th occurrence of docstring-contains-banned-literal bug: literal 'root.destroy()' in 3 window.py docstring/comment lines tripped test_tray_stop_before_destroy_ordering src.find() lint — all src.find()-based ordering lints apply to entire file source including docstrings
+- [Phase 08-system-tray]: PHASE 08 COMPLETE — All 5 TRAY-* requirements (TRAY-01..05) verified on real Windows 11 hardware. Human verification approved with notes: icon swap to eye/favicon is a future enhancement; Chrome right-click z-order and left-click inaccuracy after right-click are pre-existing issues not introduced by Phase 8.
 
 ### Pending Todos
 
@@ -211,8 +213,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-18T03:25:31.205Z
-Stopped at: Paused at 08-02-PLAN.md Task 2 checkpoint (human-verify): TrayManager wired into window.py+app.py+spec; 9/9 test_tray.py pass; 294 total pass; awaiting 5-step manual verification of live tray icon, menu, AoT toggle, clean exit
+Last session: 2026-04-17T00:00:00.000Z
+Stopped at: Phase 08 complete — 08-02-PLAN.md Task 2 human verification approved with notes. All TRAY-01..05 requirements met. Ready for Phase 9 (Build and Package).
 Resume file: None
 
-Next step: `/gsd:plan-phase 08` (system tray — tray icon, Show/Hide menu item, right-click tray menu). Multi-monitor support deferred per user decision 2026-04-17. OPEN: close button on bubble (overlay dismissable without tray). Tk init.tcl path errors in bash shell are a pre-existing env artifact (not test failures); EXE and normal Windows launch unaffected.
+Next step: `/gsd:plan-phase 09` (build-and-package — PyInstaller single-file EXE, build.bat, README, push to GitHub). Phase 8 future enhancement noted: icon swap to eye/favicon design. Pre-existing issues (not Phase 8 gaps): Chrome right-click z-order above zoom bubble; left-click inaccuracy after right-click.

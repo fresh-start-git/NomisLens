@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Config Persistence** - Position, size, zoom, shape saved to config.json and restored on launch (completed 2026-04-13)
 - [x] **Phase 6: Global Hotkey** - Ctrl+Alt+Z toggles bubble visibility even when Cornerstone has focus (completed 2026-04-16)
 - [x] **Phase 7: DXGI Capture + Transparent Input** - Replace Magnification API with DXGI Desktop Duplication so all menus (Chrome, Win11 shell, Cornerstone) are captured; replace click injection with WS_EX_TRANSPARENT content zone so all input passes through naturally (completed 2026-04-18)
-- [ ] **Phase 8: System Tray** - Tray icon with Show/Hide, Always-on-Top toggle, and Exit
+- [x] **Phase 8: System Tray** - Tray icon with Show/Hide, Always-on-Top toggle, and Exit (completed 2026-04-17)
 - [ ] **Phase 9: Build and Package** - Single portable .exe via PyInstaller, README, pushed to GitHub
 
 ## Phase Details
@@ -142,9 +142,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Left-clicking the tray icon toggles the bubble's visibility
   4. pystray runs on its own managed thread and every menu callback is marshaled to the Tk main thread via `root.after(0, ...)` — no threading deadlocks after 5 minutes of menu interaction
   5. Exiting via the tray menu calls `icon.stop()` before `root.destroy()`, and the process terminates cleanly (no lingering threads or orphaned tray icons)
-**Plans**: 2 plans
-- [ ] 08-01-PLAN.md — Wave 0 test stubs (tests/test_tray.py structural lints + tests/test_tray_smoke.py Windows-only stubs) + TrayManager implementation (src/magnifier_bubble/tray.py: create_tray_image + TrayManager class with non-daemon thread, icon lifecycle, 3 marshaled callbacks) (TRAY-01, TRAY-02, TRAY-03, TRAY-04, TRAY-05)
-- [ ] 08-02-PLAN.md — Integration: attach_tray_manager + toggle_aot_and_apply in window.py + tray_manager.stop() in destroy() chain + TrayManager wiring in app.py + pystray._win32 in naomi_zoom.spec + 5-step manual verification checkpoint (TRAY-01, TRAY-02, TRAY-03, TRAY-04, TRAY-05)
+**Plans**: 2 plans (2/2 complete)
+- [x] 08-01-PLAN.md — Wave 0 test stubs (tests/test_tray.py structural lints + tests/test_tray_smoke.py Windows-only stubs) + TrayManager implementation (src/magnifier_bubble/tray.py: create_tray_image + TrayManager class with non-daemon thread, icon lifecycle, 3 marshaled callbacks) (TRAY-01, TRAY-02, TRAY-03, TRAY-04, TRAY-05) (completed 2026-04-18, see 08-01-SUMMARY.md)
+- [x] 08-02-PLAN.md — Integration: attach_tray_manager + toggle_aot_and_apply in window.py + tray_manager.stop() in destroy() chain + TrayManager wiring in app.py + pystray._win32 in naomi_zoom.spec + 5-step manual verification checkpoint (TRAY-01, TRAY-02, TRAY-03, TRAY-04, TRAY-05) (completed 2026-04-17, see 08-02-SUMMARY.md)
 
 ### Phase 9: Build and Package
 **Goal**: Produce a single portable .exe the non-technical clinic staff can double-click on a Windows 11 PC with no Python installed, documented in a plain-English README, and published to the project GitHub repo.
@@ -172,7 +172,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Config Persistence | 2/2 | Complete | 2026-04-13 |
 | 6. Global Hotkey | 4/4 | Complete | 2026-04-16 |
 | 7. DXGI Capture + Transparent Input | 3/3 | Complete   | 2026-04-18 |
-| 8. System Tray | 1/2 | In Progress|  |
+| 8. System Tray | 2/2 | Complete | 2026-04-17 |
 | 9. Build and Package | 0/TBD | Not started | - |
 
 ## Coverage

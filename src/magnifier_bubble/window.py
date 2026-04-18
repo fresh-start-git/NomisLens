@@ -754,7 +754,15 @@ class BubbleWindow:
         cx = pt.x - wx
         cy = pt.y - wy
         in_overlay = 0 <= cx < ww and 0 <= cy < wh
-        in_content = in_overlay and DRAG_STRIP_HEIGHT <= cy < (wh - CONTROL_STRIP_HEIGHT)
+        # Never set TRANSPARENT while dragging or resizing: the cursor passes
+        # through the content zone at high speed and TRANSPARENT would steal
+        # the B1-Motion / ButtonRelease-1 events, freezing the drag.
+        is_dragging = self._drag_origin is not None or self._resize_origin is not None
+        in_content = (
+            in_overlay
+            and not is_dragging
+            and DRAG_STRIP_HEIGHT <= cy < (wh - CONTROL_STRIP_HEIGHT)
+        )
         cur_ex = u32.GetWindowLongW(self._hwnd, wc.GWL_EXSTYLE)
         has_t = bool(cur_ex & wc.WS_EX_TRANSPARENT)
         if in_content and not has_t:

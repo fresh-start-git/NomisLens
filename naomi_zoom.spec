@@ -44,6 +44,9 @@ a = Analysis(
         # comtypes (dxcam dependency)
         'comtypes',
         'comtypes.client',
+        # pystray (Phase 8 system tray) — _win32 is a dynamic platform import
+        # not detected by PyInstaller analysis (Pitfall T-5 in 08-RESEARCH.md)
+        'pystray._win32',
     ],
     hookspath=[],
     hooksconfig={},

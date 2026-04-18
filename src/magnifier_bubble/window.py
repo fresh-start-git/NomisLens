@@ -133,6 +133,12 @@ class BubbleWindow:
         # None until attached.  attach_hotkey_manager is a no-op-safe symmetric
         # helper so tests and --no-hotkey paths can skip wiring without branching.
         self._hotkey_manager = None  # type: ignore[assignment]
+        # Phase 8 (TRAY-05): set by app.py via attach_tray_manager; used
+        # by destroy() to stop the pystray icon thread AFTER hotkey_manager
+        # and BEFORE capture_worker.stop() so no late tray callback can
+        # schedule root.after on a tearing-down root.
+        # None until attached.
+        self._tray_manager = None  # type: ignore[assignment]
         # Thread-safe frame queue: the capture thread puts PIL Images here;
         # the main thread drains it via a recurring root.after() poll.
         # This eliminates ALL Tk/Tcl calls from the capture thread, removing
@@ -479,6 +485,35 @@ class BubbleWindow:
         """
         self._hotkey_manager = manager
 
+    # ---- Phase 8: Tray manager attach point ----
+
+    def attach_tray_manager(self, manager) -> None:
+        """Wire a Phase 8 TrayManager so destroy() can stop it cleanly.
+
+        Called from app.py main() AFTER manager.start() succeeded.  Stored
+        as a plain attribute (duck-typed; no type import to avoid creating
+        a window.py -> tray.py import edge — same discipline as
+        attach_hotkey_manager).  Multiple calls silently overwrite.
+        """
+        self._tray_manager = manager
+
+    # ---- Phase 8 (TRAY-02): always-on-top toggle with Tk application ----
+
+    def toggle_aot_and_apply(self) -> None:
+        """Toggle always-on-top state and apply to the Tk window.
+
+        Called from TrayManager._cb_toggle_aot via root.after(0, ...).
+        Must run on the Tk main thread.
+
+        AppState.toggle_aot() updates snap.always_on_top and notifies
+        observers, but BubbleWindow._on_state_change does NOT apply the
+        always_on_top field (the observer handles shape/size/zoom only).
+        This method bridges the gap (Pitfall T-3 from 08-RESEARCH.md).
+        """
+        self.state.toggle_aot()
+        snap = self.state.snapshot()
+        self.root.wm_attributes("-topmost", snap.always_on_top)
+
     # ---- Phase 6 (HOTK-03): visibility wrappers ----
     # Called from the Tk main thread — either directly by user actions
     # or scheduled via root.after(0, ...) from the hotkey worker thread.
@@ -769,7 +804,8 @@ class BubbleWindow:
         so DXGI captures the menu through the excluded overlay layer.
 
         Runs on Tk main thread only — safe to call SetWindowLongW here.
-        Cancellable: cancel self._zone_poll_id in destroy() before root.destroy().
+        Cancellable: cancel self._zone_poll_id in destroy() before the Tk root
+        teardown so no callback fires on a partially-destroyed root.
         """
         if sys.platform != "win32" or not self._hwnd:
             return
@@ -928,14 +964,14 @@ class BubbleWindow:
         root.after(0, ...) here; the scheduled callback would never fire.
         """
         try:
-            # Phase 7: cancel zone transparency poll BEFORE root.destroy()
+            # Phase 7: cancel zone transparency poll BEFORE Tk root teardown
             if self._zone_poll_id is not None:
                 try:
                     self.root.after_cancel(self._zone_poll_id)
                 except Exception:
                     pass
                 self._zone_poll_id = None
-            # Phase 7: cancel frame queue poll BEFORE root.destroy()
+            # Phase 7: cancel frame queue poll BEFORE Tk root teardown
             if self._poll_frame_queue_id is not None:
                 try:
                     self.root.after_cancel(self._poll_frame_queue_id)
@@ -973,6 +1009,19 @@ class BubbleWindow:
                         flush=True,
                     )
                 self._hotkey_manager = None
+            # Phase 8 (TRAY-05): stop the tray icon thread AFTER the hotkey
+            # worker so no late WM_HOTKEY can race with tray teardown, and
+            # BEFORE capture_worker so no late tray callback fires root.after
+            # on a partially-torn-down root (08-RESEARCH.md Pattern 4).
+            if self._tray_manager is not None:
+                try:
+                    self._tray_manager.stop()
+                except Exception as exc:
+                    print(
+                        f"[tray] stop failed during destroy err={exc}",
+                        flush=True,
+                    )
+                self._tray_manager = None
             # Phase 3: stop the capture worker BEFORE tearing down
             # root / WndProc chain so the worker can't fire one last
             # frame onto a dead canvas.

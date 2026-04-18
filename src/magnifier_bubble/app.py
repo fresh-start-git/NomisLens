@@ -152,6 +152,17 @@ def main() -> int:
     else:
         print("[hotkey] skipped (non-Windows platform)", flush=True)
 
+    # Phase 8: construct TrayManager AFTER hotkey (so hotkey is registered
+    # before tray callbacks can fire bubble.toggle) and BEFORE start_capture.
+    # Deferred import inside platform guard — pystray._win32 is Windows-only
+    # (Pitfall T-7 in 08-RESEARCH.md).
+    if sys.platform == "win32":
+        from magnifier_bubble.tray import TrayManager
+        tm = TrayManager(bubble.root, bubble)
+        tm.start()
+        bubble.attach_tray_manager(tm)
+        print("[tray] icon started", flush=True)
+
     # Phase 3: start the 30 fps capture producer thread.  Gated by
     # sys.platform so non-Windows CI does not blow up on `import mss`.
     if sys.platform == "win32":

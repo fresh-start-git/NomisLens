@@ -47,6 +47,9 @@ a = Analysis(
         # pystray (Phase 8 system tray) — _win32 is a dynamic platform import
         # not detected by PyInstaller analysis (Pitfall T-5 in 08-RESEARCH.md)
         'pystray._win32',
+        # Phase 9 BULD-02 additions:
+        'PIL._tkinter_finder',  # Pillow/Tk bridge — prevents ImageTk crash in one-file EXE
+        'win32timezone',         # pywin32 internal — prevents startup ImportError on some Windows
     ],
     hookspath=[],
     hooksconfig={},

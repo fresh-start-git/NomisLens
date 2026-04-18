@@ -654,6 +654,18 @@ class BubbleWindow:
                     _lp = ctypes.c_long((_cpt.y << 16) | (_cpt.x & 0xFFFF)).value
                     _u32c.PostMessageW(_target, 0x0201, 1, _lp)  # WM_LBUTTONDOWN
                     _u32c.PostMessageW(_target, 0x0202, 0, _lp)  # WM_LBUTTONUP
+                    # Give the clicked control keyboard focus so typing works.
+                    # PostMessageW places the caret but does not transfer focus;
+                    # AttachThreadInput lets us call SetFocus cross-process.
+                    _k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+                    _my_tid = _k32.GetCurrentThreadId()
+                    _tgt_tid = _u32c.GetWindowThreadProcessId(_target, None)
+                    if _tgt_tid and _tgt_tid != _my_tid:
+                        _u32c.AttachThreadInput(_my_tid, _tgt_tid, True)
+                        _u32c.SetFocus(_target)
+                        _u32c.AttachThreadInput(_my_tid, _tgt_tid, False)
+                    else:
+                        _u32c.SetFocus(_target)
 
     def _on_canvas_drag(self, event) -> None:
         """Phase 4 amended: resize drag takes precedence over move drag.

@@ -6,7 +6,12 @@
 a = Analysis(
     ['main.py'],
     pathex=['src'],          # src-layout: magnifier_bubble lives here
-    binaries=[],
+    binaries=[
+        # dxcam numpy processor — Cython .pyd not auto-detected by PyInstaller analysis;
+        # without it dxcam falls back to cv2 (not installed) and every grab() fails.
+        ('.venv/Lib/site-packages/dxcam/processor/_numpy_kernels.cp311-win_amd64.pyd',
+         'dxcam/processor'),
+    ],
     datas=[],
     hiddenimports=[
         # win32gui imported conditionally in shapes.py
@@ -37,6 +42,7 @@ a = Analysis(
         'dxcam.processor.base',
         'dxcam.processor.numpy_processor',
         'dxcam.processor.cv2_processor',
+        'dxcam.processor._numpy_kernels',
         'dxcam.types',
         'dxcam.util',
         'dxcam.util.io',

@@ -366,6 +366,10 @@ class BubbleWindow:
         # by _on_canvas_drag (Task 2); cleared by _on_canvas_release.
         self._resize_origin: tuple[int, int, int, int] | None = None
 
+        # Phase 7 menu tracking: HWND of active #32768 context menu (0 = none).
+        # Set/cleared by _zone_transparency_poll; read by _on_canvas_press.
+        self._active_menu_hwnd: int = 0
+
         # --- Step 10: Install WndProc subclasses ---
         # Windows delivers WM_NCHITTEST to the topmost HWND at the cursor.
         # Tk creates three Win32 windows that stack as follows (outermost first):
@@ -563,7 +567,27 @@ class BubbleWindow:
             return
         # Content zone: WS_EX_TRANSPARENT set by _zone_transparency_poll
         # means physical clicks pass through to the underlying app.
-        # No action needed here — the OS handles routing.
+        # Exception: when a context menu is active, inject a zoom-mapped click
+        # so the menu item at the magnified cursor position is selected.
+        if self._active_menu_hwnd and sys.platform == "win32":
+            _menu_h = self._active_menu_hwnd
+            _u32m = ctypes.windll.user32  # type: ignore[attr-defined]
+            if not _u32m.IsWindowVisible(_menu_h):
+                self._active_menu_hwnd = 0
+            else:
+                snap = self.state.snapshot()
+                zoom = snap.zoom
+                src_x = snap.x + (snap.w - snap.w / zoom) / 2
+                src_y = snap.y + (snap.h - snap.h / zoom) / 2
+                actual_x = round(src_x + event.x / zoom)
+                actual_y = round(src_y + (event.y - DRAG_STRIP_HEIGHT) / zoom)
+                _hwnd = self._hwnd
+                cur_ex = _u32m.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
+                _u32m.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
+                _u32m.ReleaseCapture()
+                from magnifier_bubble.clickthru import send_lclick_at
+                send_lclick_at(actual_x, actual_y)
+                self.root.after(16, lambda: _u32m.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT))
 
     def _on_canvas_drag(self, event) -> None:
         """Phase 4 amended: resize drag takes precedence over move drag.
@@ -739,12 +763,34 @@ class BubbleWindow:
         and all mouse/touch events go to the topmost window at the cursor position
         regardless of process. This replaces all click injection machinery.
 
+        Context menu special case: when a #32768 menu is visible, TRANSPARENT
+        is cleared (so the overlay receives left-clicks for menu item injection)
+        and the Z-order is fixed (overlay above menu, menu just below overlay)
+        so DXGI captures the menu through the excluded overlay layer.
+
         Runs on Tk main thread only — safe to call SetWindowLongW here.
         Cancellable: cancel self._zone_poll_id in destroy() before root.destroy().
         """
         if sys.platform != "win32" or not self._hwnd:
             return
         u32 = ctypes.windll.user32  # type: ignore[attr-defined]
+
+        # --- Context menu detection and Z-order fix ---
+        menu_hwnd = u32.FindWindowW("#32768", None)
+        menu_visible = bool(menu_hwnd and u32.IsWindowVisible(menu_hwnd))
+        if menu_visible:
+            if self._active_menu_hwnd != menu_hwnd:
+                self._active_menu_hwnd = menu_hwnd
+                # Assert overlay at HWND_TOPMOST, then push menu just below.
+                # DXGI Desktop Duplication captures through WDA_EXCLUDEFROMCAPTURE
+                # and sees the menu when it is below the overlay in Z-order.
+                _SWP = 0x0002 | 0x0001 | 0x0010  # NOMOVE | NOSIZE | NOACTIVATE
+                u32.SetWindowPos(self._hwnd, -1, 0, 0, 0, 0, _SWP)   # HWND_TOPMOST
+                u32.SetWindowPos(menu_hwnd, self._hwnd, 0, 0, 0, 0, _SWP)
+        else:
+            if self._active_menu_hwnd:
+                self._active_menu_hwnd = 0
+
         pt = ctypes.wintypes.POINT()
         u32.GetCursorPos(ctypes.byref(pt))
         wx = self.root.winfo_x()
@@ -757,10 +803,13 @@ class BubbleWindow:
         # Never set TRANSPARENT while dragging or resizing: the cursor passes
         # through the content zone at high speed and TRANSPARENT would steal
         # the B1-Motion / ButtonRelease-1 events, freezing the drag.
+        # Also never set TRANSPARENT while a context menu is active: we need
+        # to receive left-click events to inject zoom-mapped menu item clicks.
         is_dragging = self._drag_origin is not None or self._resize_origin is not None
         in_content = (
             in_overlay
             and not is_dragging
+            and not self._active_menu_hwnd
             and DRAG_STRIP_HEIGHT <= cy < (wh - CONTROL_STRIP_HEIGHT)
         )
         cur_ex = u32.GetWindowLongW(self._hwnd, wc.GWL_EXSTYLE)

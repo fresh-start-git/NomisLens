@@ -26,3 +26,13 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Agent scaffolding (internal tooling — not for public repo)
+.claude/
+.remember/
+
+# Debug log (contains runtime exception traces — not for public repo)
+zoom_log.txt
+
+# Runtime theme state (written by app at runtime — not a source file)
+theme.json

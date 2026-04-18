@@ -576,11 +576,11 @@ class BubbleWindow:
                 self._active_menu_hwnd = 0
             else:
                 snap = self.state.snapshot()
-                zoom = snap.zoom
-                src_x = snap.x + (snap.w - snap.w / zoom) / 2
-                src_y = snap.y + (snap.h - snap.h / zoom) / 2
-                actual_x = round(src_x + event.x / zoom)
-                actual_y = round(src_y + event.y / zoom)
+                # Menu item is at the physical cursor position: the user moved
+                # their cursor onto the menu item they want to click. No zoom
+                # mapping — actual coords ARE the cursor's screen position.
+                actual_x = snap.x + event.x
+                actual_y = snap.y + event.y
                 _hwnd = self._hwnd
                 cur_ex = _u32m.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
                 _u32m.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)

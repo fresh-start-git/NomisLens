@@ -604,8 +604,13 @@ class BubbleWindow:
                 self.root.winfo_x(), self.root.winfo_y(),
             )
             return
-        # Content zone: find target HWND via WindowFromPoint and PostMessageW.
-        # For #32768 system-menu targets (which ignore PostMessageW) use SendInput.
+        # Content zone: inject via real hardware events (SendInput).
+        # WS_EX_TRANSPARENT on our parent HWND excludes the entire overlay
+        # tree from hardware event routing — the click lands on the target
+        # window below and Windows handles focus transfer automatically.
+        # This is more reliable than PostMessageW for focus (no AttachThreadInput
+        # needed) and works for all targets: standard controls, system menus,
+        # DirectUI, WebView2.
         if sys.platform == "win32":
             snap = self.state.snapshot()
             src_x = snap.x + (snap.w - snap.w / snap.zoom) / 2
@@ -613,59 +618,18 @@ class BubbleWindow:
             actual_x = round(src_x + event.x / snap.zoom)
             actual_y = round(src_y + (event.y - DRAG_STRIP_HEIGHT) / snap.zoom)
             _u32c = ctypes.windll.user32  # type: ignore[attr-defined]
-            _u32c.WindowFromPoint.argtypes = [ctypes.wintypes.POINT]
-            _u32c.WindowFromPoint.restype = ctypes.wintypes.HWND
-            _u32c.ScreenToClient.argtypes = [
-                ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.POINT)]
-            _u32c.ScreenToClient.restype = ctypes.wintypes.BOOL
-            _u32c.PostMessageW.argtypes = [
-                ctypes.wintypes.HWND, ctypes.wintypes.UINT,
-                ctypes.wintypes.WPARAM, ctypes.wintypes.LPARAM]
-            _u32c.PostMessageW.restype = ctypes.wintypes.BOOL
             _hwnd = self._hwnd
             cur_ex = _u32c.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
             _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
-            _target = _u32c.WindowFromPoint(
-                ctypes.wintypes.POINT(actual_x, actual_y))
-            # Restore immediately — PostMessageW path is synchronous
-            _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT)
-            if _target and _target != _hwnd:
-                # Check if target is a system context menu (#32768).
-                # System menus use a modal pump that ignores PostMessageW;
-                # they need real input events via SendInput.
-                # GetClassNameW called without overriding global argtypes to
-                # avoid ctypes ArgumentError on the create_unicode_buffer arg.
-                _cls_buf = ctypes.create_unicode_buffer(256)
-                ctypes.windll.user32.GetClassNameW(_target, _cls_buf, 256)
-                if _cls_buf.value == "#32768":
-                    if self._active_menu_hwnd:
-                        _u32c.ReleaseCapture()
-                    _u32c.SetWindowLongW(
-                        _hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
-                    from magnifier_bubble.clickthru import send_lclick_at
-                    send_lclick_at(actual_x, actual_y)
-                    _saved = cur_ex
-                    self.root.after(
-                        16, lambda: _u32c.SetWindowLongW(
-                            _hwnd, wc.GWL_EXSTYLE, _saved))
-                else:
-                    _cpt = ctypes.wintypes.POINT(actual_x, actual_y)
-                    _u32c.ScreenToClient(_target, ctypes.byref(_cpt))
-                    _lp = ctypes.c_long((_cpt.y << 16) | (_cpt.x & 0xFFFF)).value
-                    _u32c.PostMessageW(_target, 0x0201, 1, _lp)  # WM_LBUTTONDOWN
-                    _u32c.PostMessageW(_target, 0x0202, 0, _lp)  # WM_LBUTTONUP
-                    # Give the clicked control keyboard focus so typing works.
-                    # PostMessageW places the caret but does not transfer focus;
-                    # AttachThreadInput lets us call SetFocus cross-process.
-                    _k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-                    _my_tid = _k32.GetCurrentThreadId()
-                    _tgt_tid = _u32c.GetWindowThreadProcessId(_target, None)
-                    if _tgt_tid and _tgt_tid != _my_tid:
-                        _u32c.AttachThreadInput(_my_tid, _tgt_tid, True)
-                        _u32c.SetFocus(_target)
-                        _u32c.AttachThreadInput(_my_tid, _tgt_tid, False)
-                    else:
-                        _u32c.SetFocus(_target)
+            # Release implicit mouse capture acquired when WM_LBUTTONDOWN hit
+            # our canvas — without this, SendInput events route back to us.
+            _u32c.ReleaseCapture()
+            from magnifier_bubble.clickthru import send_lclick_at
+            send_lclick_at(actual_x, actual_y)
+            # Restore after 16 ms — SendInput is asynchronous and the events
+            # must be processed while the window is still transparent.
+            _saved = cur_ex
+            self.root.after(16, lambda: _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, _saved))
 
     def _on_canvas_drag(self, event) -> None:
         """Phase 4 amended: resize drag takes precedence over move drag.

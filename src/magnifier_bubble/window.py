@@ -452,11 +452,15 @@ class BubbleWindow:
         self._prev_snap = self.state.snapshot()
         self.state.on_change(self._on_state_change)
 
-        # Phase 7: zone transparency poll — sets WS_EX_TRANSPARENT when cursor
-        # is in the content zone so physical mouse/touch falls through to the
-        # underlying app. Cleared for drag and control strips.
+        # Phase 7: zone transparency poll — manages context menu Z-order for
+        # DXGI capture visibility.  Click injection (WS_EX_TRANSPARENT) is
+        # applied only at click time in _on_canvas_press / _on_canvas_rclick.
         self._zone_poll_id: str | None = None
         self._poll_frame_queue_id: str | None = None
+        # Popup snapshot taken before each right-click injection so the poll
+        # can detect non-#32768 menus (Chrome, etc.) as "newly appeared" popups.
+        self._pre_rclick_popups: set = set()
+        self._rclick_pending_ticks: int = 0  # counts down from 60 (~3 s) after each rclick
         if sys.platform == "win32" and self._hwnd:
             self._zone_poll_id = self.root.after(50, self._zone_transparency_poll)
 
@@ -600,40 +604,56 @@ class BubbleWindow:
                 self.root.winfo_x(), self.root.winfo_y(),
             )
             return
-        # Content zone click — compute zoom-mapped screen position and inject.
-        # WS_EX_TRANSPARENT is no longer used (it forwarded at physical cursor
-        # coords which are wrong when zoom > 1).  The WndProc returns HTCLIENT
-        # so Tk delivers this event; we forward at the correct mapped position.
-        snap = self.state.snapshot()
-        src_x = snap.x + (snap.w - snap.w / snap.zoom) / 2
-        src_y = snap.y + (snap.h - snap.h / snap.zoom) / 2
-        actual_x = round(src_x + event.x / snap.zoom)
-        actual_y = round(src_y + event.y / snap.zoom)
-        if self._active_menu_hwnd and sys.platform == "win32":
-            _menu_h = self._active_menu_hwnd
-            _u32m = ctypes.windll.user32  # type: ignore[attr-defined]
-            if not _u32m.IsWindowVisible(_menu_h):
-                self._active_menu_hwnd = 0
-            else:
-                _hwnd = self._hwnd
-                cur_ex = _u32m.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
-                _u32m.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
-                _u32m.ReleaseCapture()
-                from magnifier_bubble.clickthru import send_lclick_at
-                send_lclick_at(actual_x, actual_y)
-                self.root.after(16, lambda: _u32m.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT))
-        elif sys.platform == "win32":
-            # Same WS_EX_TRANSPARENT + ReleaseCapture pattern as the menu path:
-            # the zoom-mapped position falls inside the overlay, so we must be
-            # transparent during the SendInput batch or the click hits us again.
+        # Content zone: find target HWND via WindowFromPoint and PostMessageW.
+        # For #32768 system-menu targets (which ignore PostMessageW) use SendInput.
+        if sys.platform == "win32":
+            snap = self.state.snapshot()
+            src_x = snap.x + (snap.w - snap.w / snap.zoom) / 2
+            src_y = snap.y + (snap.h - snap.h / snap.zoom) / 2
+            actual_x = round(src_x + event.x / snap.zoom)
+            actual_y = round(src_y + (event.y - DRAG_STRIP_HEIGHT) / snap.zoom)
             _u32c = ctypes.windll.user32  # type: ignore[attr-defined]
+            _u32c.WindowFromPoint.argtypes = [ctypes.wintypes.POINT]
+            _u32c.WindowFromPoint.restype = ctypes.wintypes.HWND
+            _u32c.ScreenToClient.argtypes = [
+                ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.POINT)]
+            _u32c.ScreenToClient.restype = ctypes.wintypes.BOOL
+            _u32c.PostMessageW.argtypes = [
+                ctypes.wintypes.HWND, ctypes.wintypes.UINT,
+                ctypes.wintypes.WPARAM, ctypes.wintypes.LPARAM]
+            _u32c.PostMessageW.restype = ctypes.wintypes.BOOL
             _hwnd = self._hwnd
             cur_ex = _u32c.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
             _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
-            _u32c.ReleaseCapture()
-            from magnifier_bubble.clickthru import send_lclick_at
-            send_lclick_at(actual_x, actual_y)
-            self.root.after(16, lambda: _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT))
+            _target = _u32c.WindowFromPoint(
+                ctypes.wintypes.POINT(actual_x, actual_y))
+            # Restore immediately — PostMessageW path is synchronous
+            _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT)
+            if _target and _target != _hwnd:
+                # Check if target is a system context menu (#32768).
+                # System menus use a modal pump that ignores PostMessageW;
+                # they need real input events via SendInput.
+                # GetClassNameW called without overriding global argtypes to
+                # avoid ctypes ArgumentError on the create_unicode_buffer arg.
+                _cls_buf = ctypes.create_unicode_buffer(256)
+                ctypes.windll.user32.GetClassNameW(_target, _cls_buf, 256)
+                if _cls_buf.value == "#32768":
+                    if self._active_menu_hwnd:
+                        _u32c.ReleaseCapture()
+                    _u32c.SetWindowLongW(
+                        _hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
+                    from magnifier_bubble.clickthru import send_lclick_at
+                    send_lclick_at(actual_x, actual_y)
+                    _saved = cur_ex
+                    self.root.after(
+                        16, lambda: _u32c.SetWindowLongW(
+                            _hwnd, wc.GWL_EXSTYLE, _saved))
+                else:
+                    _cpt = ctypes.wintypes.POINT(actual_x, actual_y)
+                    _u32c.ScreenToClient(_target, ctypes.byref(_cpt))
+                    _lp = ctypes.c_long((_cpt.y << 16) | (_cpt.x & 0xFFFF)).value
+                    _u32c.PostMessageW(_target, 0x0201, 1, _lp)  # WM_LBUTTONDOWN
+                    _u32c.PostMessageW(_target, 0x0202, 0, _lp)  # WM_LBUTTONUP
 
     def _on_canvas_drag(self, event) -> None:
         """Phase 4 amended: resize drag takes precedence over move drag.
@@ -801,56 +821,82 @@ class BubbleWindow:
             self._on_frame(img)
         self._poll_frame_queue_id = self.root.after(16, self._poll_frame_queue)  # ~60 fps poll
 
+    def _get_popup_hwnds(self) -> set:
+        """Return set of all currently visible WS_POPUP window HWNDs.
+
+        Used to snapshot the popup landscape before a right-click injection so
+        that _zone_transparency_poll can detect non-#32768 menus (Chrome custom
+        popups, Explorer popups, etc.) as newly appeared windows.
+        """
+        popups: set = set()
+        _u32p = ctypes.windll.user32  # type: ignore[attr-defined]
+        _GWL_STYLE = -16
+        _WS_POPUP = 0x80000000
+        WNDENUMPROC = ctypes.WINFUNCTYPE(
+            ctypes.c_bool, ctypes.c_ulong, ctypes.c_long
+        )
+
+        def _cb(hwnd: int, _: int) -> bool:
+            if _u32p.IsWindowVisible(hwnd):
+                if _u32p.GetWindowLongW(hwnd, _GWL_STYLE) & _WS_POPUP:
+                    popups.add(hwnd)
+            return True
+
+        _fn = WNDENUMPROC(_cb)
+        _u32p.EnumWindows(_fn, 0)
+        return popups
+
     def _zone_transparency_poll(self) -> None:
-        """50 ms timer: set WS_EX_TRANSPARENT when cursor is in content zone,
-        clear it when cursor is in drag/control strip or outside overlay.
+        """50 ms timer: fix context menu Z-order so DXGI sees the menu below
+        the WDA_EXCLUDEFROMCAPTURE overlay.
 
-        When WS_EX_TRANSPARENT is set, WindowFromPoint skips the overlay entirely
-        and all mouse/touch events go to the topmost window at the cursor position
-        regardless of process. This replaces all click injection machinery.
-
-        Context menu special case: when a #32768 menu is visible, TRANSPARENT
-        is cleared (so the overlay receives left-clicks for menu item injection)
-        and the Z-order is fixed (overlay above menu, menu just below overlay)
-        so DXGI captures the menu through the excluded overlay layer.
-
-        Runs on Tk main thread only — safe to call SetWindowLongW here.
-        Cancellable: cancel self._zone_poll_id in destroy() before the Tk root
-        teardown so no callback fires on a partially-destroyed root.
+        Detects both standard Win32 #32768 menus and custom popup menus
+        (Chrome, Explorer, etc.) that appeared after a right-click injection.
+        Re-asserts Z-order every tick because HWND_TOPMOST apps can re-assert
+        themselves between our 50 ms windows.
         """
         if sys.platform != "win32" or not self._hwnd:
             return
         u32 = ctypes.windll.user32  # type: ignore[attr-defined]
 
-        # --- Context menu detection and Z-order fix ---
-        # FindWindowW returns the topmost #32768 window. Guard with a minimum
-        # size check to reject stale hidden system windows (valid menus are
-        # always at least 50×15 px). Re-assert Z-order every poll: Chrome
-        # reasserts HWND_TOPMOST on its own message loop between our 50 ms ticks,
-        # so a one-shot fix is overridden and the menu climbs above the overlay.
-        menu_hwnd = u32.FindWindowW("#32768", None)
+        menu_hwnd = 0
         menu_visible = False
-        if menu_hwnd and u32.IsWindowVisible(menu_hwnd):
+
+        # Primary: standard Win32 context menu (#32768 class)
+        fw = u32.FindWindowW("#32768", None)
+        if fw and u32.IsWindowVisible(fw):
             _mr = ctypes.wintypes.RECT()
-            u32.GetWindowRect(menu_hwnd, ctypes.byref(_mr))
+            u32.GetWindowRect(fw, ctypes.byref(_mr))
             if (_mr.right - _mr.left) >= 50 and (_mr.bottom - _mr.top) >= 15:
+                menu_hwnd = fw
                 menu_visible = True
+
+        # Fallback: scan for any new popup that appeared since the last
+        # right-click injection — catches Chrome menus, custom shell popups, etc.
+        if not menu_visible and self._rclick_pending_ticks > 0:
+            self._rclick_pending_ticks -= 1
+            current = self._get_popup_hwnds()
+            for h in current - self._pre_rclick_popups:
+                if h == self._hwnd:
+                    continue
+                _r2 = ctypes.wintypes.RECT()
+                u32.GetWindowRect(h, ctypes.byref(_r2))
+                if (_r2.right - _r2.left) >= 50 and (_r2.bottom - _r2.top) >= 15:
+                    menu_hwnd = h
+                    menu_visible = True
+                    break
+
         if menu_visible:
+            self._rclick_pending_ticks = 0  # found our menu, stop scanning
             self._active_menu_hwnd = menu_hwnd
-            # Always re-assert: overlay at HWND_TOPMOST, menu just below.
-            # DXGI captures through WDA_EXCLUDEFROMCAPTURE and sees the menu
-            # when it is below the overlay in Z-order.
             _SWP = 0x0002 | 0x0001 | 0x0010  # NOMOVE | NOSIZE | NOACTIVATE
-            u32.SetWindowPos(self._hwnd, -1, 0, 0, 0, 0, _SWP)   # HWND_TOPMOST
-            u32.SetWindowPos(menu_hwnd, self._hwnd, 0, 0, 0, 0, _SWP)
+            u32.SetWindowPos(self._hwnd, -1, 0, 0, 0, 0, _SWP)    # overlay topmost
+            u32.SetWindowPos(menu_hwnd, self._hwnd, 0, 0, 0, 0, _SWP)  # menu just below
         else:
             if self._active_menu_hwnd:
                 self._active_menu_hwnd = 0
+                self._rclick_pending_ticks = 0  # menu dismissed
 
-        # WS_EX_TRANSPARENT is no longer used for content-zone hover pass-through.
-        # It is now set only for the ~16 ms duration of each injected click by
-        # _on_canvas_press / _on_canvas_rclick so the SendInput batch reaches
-        # the underlying window.  The poll must not touch it here.
         self._zone_poll_id = self.root.after(50, self._zone_transparency_poll)
 
     def _on_frame(self, img) -> None:
@@ -942,21 +988,52 @@ class BubbleWindow:
         _h = self.root.winfo_height()
         if event.y >= _h - CONTROL_STRIP_HEIGHT:
             return
-        # Content zone right-click — zoom-map and inject.
+        # Content zone right-click — WindowFromPoint + PostMessageW.
+        # Snapshot popups BEFORE injection so the poll can detect new custom
+        # menus (Chrome, etc.) that appear after the right-click.
+        # Also post WM_CONTEXTMENU explicitly after WM_RBUTTONDOWN/UP so that
+        # targets like the desktop shell (SysListView32 under Progman) which
+        # don't auto-generate WM_CONTEXTMENU from button messages still open
+        # their context menus.
         if sys.platform == "win32":
             snap = self.state.snapshot()
             src_x = snap.x + (snap.w - snap.w / snap.zoom) / 2
             src_y = snap.y + (snap.h - snap.h / snap.zoom) / 2
             actual_x = round(src_x + event.x / snap.zoom)
-            actual_y = round(src_y + event.y / snap.zoom)
+            actual_y = round(src_y + (event.y - DRAG_STRIP_HEIGHT) / snap.zoom)
+            # Snapshot existing popups before injecting — new ones that appear
+            # after injection are our context menu (even if not #32768 class).
+            self._pre_rclick_popups = self._get_popup_hwnds()
+            self._rclick_pending_ticks = 60  # scan for ~3 s
             _u32r = ctypes.windll.user32  # type: ignore[attr-defined]
+            _u32r.WindowFromPoint.argtypes = [ctypes.wintypes.POINT]
+            _u32r.WindowFromPoint.restype = ctypes.wintypes.HWND
+            _u32r.ScreenToClient.argtypes = [
+                ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.POINT)]
+            _u32r.ScreenToClient.restype = ctypes.wintypes.BOOL
+            _u32r.PostMessageW.argtypes = [
+                ctypes.wintypes.HWND, ctypes.wintypes.UINT,
+                ctypes.wintypes.WPARAM, ctypes.wintypes.LPARAM]
+            _u32r.PostMessageW.restype = ctypes.wintypes.BOOL
             _hwnd = self._hwnd
             cur_ex = _u32r.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
             _u32r.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
-            _u32r.ReleaseCapture()
-            from magnifier_bubble.clickthru import send_rclick_at
-            send_rclick_at(actual_x, actual_y)
-            self.root.after(16, lambda: _u32r.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT))
+            _target = _u32r.WindowFromPoint(
+                ctypes.wintypes.POINT(actual_x, actual_y))
+            _u32r.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT)
+            if _target and _target != _hwnd:
+                _cpt = ctypes.wintypes.POINT(actual_x, actual_y)
+                _u32r.ScreenToClient(_target, ctypes.byref(_cpt))
+                _lp = ctypes.c_long((_cpt.y << 16) | (_cpt.x & 0xFFFF)).value
+                _u32r.PostMessageW(_target, 0x0204, 0, _lp)  # WM_RBUTTONDOWN
+                _u32r.PostMessageW(_target, 0x0205, 0, _lp)  # WM_RBUTTONUP
+                # WM_CONTEXTMENU — screen coords in lParam; explicitly requests
+                # context menu for targets (desktop shell) that don't auto-post
+                # WM_CONTEXTMENU from WM_RBUTTONDOWN/UP processing.
+                _ctx_lp = ctypes.c_long(
+                    (actual_y << 16) | (actual_x & 0xFFFF)
+                ).value
+                _u32r.PostMessageW(_target, 0x007B, _target, _ctx_lp)
 
     # ---- Public teardown ----
 

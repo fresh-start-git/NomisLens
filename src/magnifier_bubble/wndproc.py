@@ -131,13 +131,23 @@ def install(
     u32 = _u32()
     old_proc = u32.GetWindowLongPtrW(hwnd, wc.GWLP_WNDPROC)
 
+    # Cached GetWindowRect result for this HWND.  Invalidated by WM_SIZE,
+    # WM_MOVE, WM_WINDOWPOSCHANGED so the hot-path WM_NCHITTEST handler
+    # (fired on every cursor movement) avoids a kernel round-trip.  H1.
+    _rect_cache = wintypes.RECT()
+    _rect_valid = False
+
     def py_wndproc(h, msg, wparam, lparam):
+        nonlocal _rect_valid
         if msg == wc.WM_MOUSEACTIVATE:
             # Prevent the parent window from stealing focus on any click.
             # WM_MOUSEACTIVATE fires before WM_NCHITTEST, so this must be
             # handled here — returning MA_NOACTIVATE keeps the foreground
             # window (e.g. Notepad) unchanged regardless of which zone was hit.
             return wc.MA_NOACTIVATE
+        # WM_SIZE=0x0005, WM_MOVE=0x0003, WM_WINDOWPOSCHANGED=0x0047
+        if msg in (0x0005, 0x0003, 0x0047):
+            _rect_valid = False
         if msg == wc.WM_NCHITTEST:
             # lParam packs SCREEN-space coordinates as two 16-bit shorts.
             # Use signed c_short cast — the unsigned word-extraction macros
@@ -145,12 +155,13 @@ def install(
             # coordinates per Microsoft Learn WM_NCHITTEST "Remarks".
             sx = ctypes.c_short(lparam & 0xFFFF).value
             sy = ctypes.c_short((lparam >> 16) & 0xFFFF).value
-            rect = wintypes.RECT()
-            _py_user32.GetWindowRect(h, ctypes.byref(rect))
-            cx = sx - rect.left
-            cy = sy - rect.top
-            w = rect.right - rect.left
-            wh = rect.bottom - rect.top
+            if not _rect_valid:
+                _py_user32.GetWindowRect(h, ctypes.byref(_rect_cache))
+                _rect_valid = True
+            cx = sx - _rect_cache.left
+            cy = sy - _rect_cache.top
+            w = _rect_cache.right - _rect_cache.left
+            wh = _rect_cache.bottom - _rect_cache.top
             try:
                 zone = compute_zone_fn(cx, cy, w, wh)
             except Exception:
@@ -209,18 +220,25 @@ def install_child(
     u32 = _u32()
     old_proc = u32.GetWindowLongPtrW(child_hwnd, wc.GWLP_WNDPROC)
 
+    _child_rect_cache = wintypes.RECT()
+    _child_rect_valid = False
+
     def py_child_wndproc(h, msg, wparam, lparam):
+        nonlocal _child_rect_valid
         if msg == wc.WM_MOUSEACTIVATE:
             return wc.MA_NOACTIVATE
+        if msg in (0x0005, 0x0003, 0x0047):
+            _child_rect_valid = False
         if msg == wc.WM_NCHITTEST:
             sx = ctypes.c_short(lparam & 0xFFFF).value
             sy = ctypes.c_short((lparam >> 16) & 0xFFFF).value
-            rect = wintypes.RECT()
-            _py_user32.GetWindowRect(h, ctypes.byref(rect))
-            cx = sx - rect.left
-            cy = sy - rect.top
-            w = rect.right - rect.left
-            wh = rect.bottom - rect.top
+            if not _child_rect_valid:
+                _py_user32.GetWindowRect(h, ctypes.byref(_child_rect_cache))
+                _child_rect_valid = True
+            cx = sx - _child_rect_cache.left
+            cy = sy - _child_rect_cache.top
+            w = _child_rect_cache.right - _child_rect_cache.left
+            wh = _child_rect_cache.bottom - _child_rect_cache.top
             try:
                 zone = compute_zone_fn(cx, cy, w, wh)
             except Exception:

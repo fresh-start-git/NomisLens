@@ -35,7 +35,6 @@ import queue
 import sys
 import tkinter as tk
 from ctypes import wintypes
-from typing import Callable
 
 from PIL import ImageTk
 
@@ -76,34 +75,62 @@ _WINDOW_SIGNATURES_APPLIED = False
 
 
 def _u32():
-    """Lazy bind of user32 functions used by BubbleWindow construction.
+    """Lazy bind of user32 functions used anywhere in BubbleWindow.
 
-    Mirrors the pattern in dpi.py and wndproc.py - defensive argtypes so
-    x64 Python passes HWND and LONG_PTR values at full pointer width.
+    All argtypes are set here once at first use — NEVER inside event handlers
+    (H3: mutating global ctypes DLL state mid-event is thread-unsafe and runs
+    on every call instead of once).  Mirrors the pattern in wndproc._u32().
     """
     global _WINDOW_SIGNATURES_APPLIED
     u32 = ctypes.windll.user32  # type: ignore[attr-defined]
     if not _WINDOW_SIGNATURES_APPLIED:
+        # ---- construction / style ----
         u32.GetParent.argtypes = [wintypes.HWND]
         u32.GetParent.restype = wintypes.HWND
+        # GWL_EXSTYLE is a 32-bit LONG even on x64 — c_long is correct here.
         u32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
         u32.GetWindowLongW.restype = ctypes.c_long
         u32.SetWindowLongW.argtypes = [
-            wintypes.HWND, ctypes.c_int, ctypes.c_long
+            wintypes.HWND, ctypes.c_int, ctypes.c_long,
         ]
         u32.SetWindowLongW.restype = ctypes.c_long
         u32.SetLayeredWindowAttributes.argtypes = [
-            wintypes.HWND, wintypes.COLORREF, wintypes.BYTE, wintypes.DWORD
+            wintypes.HWND, wintypes.COLORREF, wintypes.BYTE, wintypes.DWORD,
         ]
         u32.SetLayeredWindowAttributes.restype = wintypes.BOOL
-        u32.SetWindowDisplayAffinity.argtypes = [
-            wintypes.HWND, wintypes.DWORD
-        ]
+        u32.SetWindowDisplayAffinity.argtypes = [wintypes.HWND, wintypes.DWORD]
         u32.SetWindowDisplayAffinity.restype = wintypes.BOOL
         u32.GetWindowDisplayAffinity.argtypes = [
-            wintypes.HWND, ctypes.POINTER(wintypes.DWORD)
+            wintypes.HWND, ctypes.POINTER(wintypes.DWORD),
         ]
         u32.GetWindowDisplayAffinity.restype = wintypes.BOOL
+        # ---- click injection helpers (_on_canvas_press / _on_canvas_rclick) ----
+        u32.ReleaseCapture.argtypes = []
+        u32.ReleaseCapture.restype = wintypes.BOOL
+        # WindowFromPoint takes POINT by value (two 32-bit ints on the stack).
+        u32.WindowFromPoint.argtypes = [wintypes.POINT]
+        u32.WindowFromPoint.restype = wintypes.HWND
+        # GetAncestor: hwnd + gaFlags(UINT) → parent HWND
+        u32.GetAncestor.argtypes = [wintypes.HWND, ctypes.c_uint]
+        u32.GetAncestor.restype = wintypes.HWND
+        u32.SetForegroundWindow.argtypes = [wintypes.HWND]
+        u32.SetForegroundWindow.restype = wintypes.BOOL
+        u32.IsWindowVisible.argtypes = [wintypes.HWND]
+        u32.IsWindowVisible.restype = wintypes.BOOL
+        # ---- Z-order fix (_zone_transparency_poll) ----
+        u32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+        u32.FindWindowW.restype = wintypes.HWND
+        u32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+        u32.GetWindowRect.restype = wintypes.BOOL
+        u32.SetWindowPos.argtypes = [
+            wintypes.HWND, wintypes.HWND,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ctypes.c_uint,
+        ]
+        u32.SetWindowPos.restype = wintypes.BOOL
+        # ---- position clamping (config load) ----
+        u32.GetSystemMetrics.argtypes = [ctypes.c_int]
+        u32.GetSystemMetrics.restype = ctypes.c_int
         _WINDOW_SIGNATURES_APPLIED = True
     return u32
 
@@ -141,11 +168,10 @@ class BubbleWindow:
         self._tray_manager = None  # type: ignore[assignment]
         # Thread-safe frame queue: the capture thread puts PIL Images here;
         # the main thread drains it via a recurring root.after() poll.
-        # This eliminates ALL Tk/Tcl calls from the capture thread, removing
-        # the Python 3.14 GIL/PyEval_RestoreThread crash that occurred when
-        # root.after(0, ...) was called from the capture thread during any
-        # message-pump-active window (modal Send-Message drag loop, WM_NCHITTEST, etc.)
-        self._frame_queue: queue.SimpleQueue = queue.SimpleQueue()
+        # maxsize=2 caps memory if the main thread stalls (M1: unbounded growth).
+        # The capture thread uses put_nowait and drops frames when full — a
+        # stale frame is always preferable to unbounded memory growth.
+        self._frame_queue: queue.Queue = queue.Queue(maxsize=2)
 
         # Theme — loaded from theme.json; determines instance color vars used
         # by _draw_border and _apply_theme.  Defaults to theme 0 until loaded.
@@ -375,6 +401,9 @@ class BubbleWindow:
         # Phase 7 menu tracking: HWND of active #32768 context menu (0 = none).
         # Set/cleared by _zone_transparency_poll; read by _on_canvas_press.
         self._active_menu_hwnd: int = 0
+        # Guards the 32ms WS_EX_TRANSPARENT restore window so a double-click
+        # within that window doesn't set it again and leave it permanently on.
+        self._transparent_restoring: bool = False
 
         # --- Step 10: Install WndProc subclasses ---
         # Windows delivers WM_NCHITTEST to the topmost HWND at the cursor.
@@ -604,61 +633,48 @@ class BubbleWindow:
                 self.root.winfo_x(), self.root.winfo_y(),
             )
             return
-        # Content zone: compute zoom-corrected target position then inject click.
+        # Content zone: WS_EX_TRANSPARENT + SendInput click injection.
+        # Setting WS_EX_TRANSPARENT on the top-level parent makes the entire
+        # window hierarchy (parent + all Tk children) transparent to hit-testing.
+        # SendInput LEFTDOWN at actual_x,actual_y then bypasses the overlay and
+        # reaches whatever Win32/UWP/Electron/Qt window is below.
+        # WindowFromPoint (also called with transparent overlay) returns the same
+        # target, allowing SetForegroundWindow to transfer keyboard focus so text
+        # boxes respond immediately after the click.
         if sys.platform == "win32":
             snap = self.state.snapshot()
             src_x = snap.x + (snap.w - snap.w / snap.zoom) / 2
             src_y = snap.y + (snap.h - snap.h / snap.zoom) / 2
             actual_x = round(src_x + event.x / snap.zoom)
             actual_y = round(src_y + (event.y - DRAG_STRIP_HEIGHT) / snap.zoom)
-            _u32c = ctypes.windll.user32  # type: ignore[attr-defined]
-            _u32c.WindowFromPoint.argtypes = [ctypes.wintypes.POINT]
-            _u32c.WindowFromPoint.restype = ctypes.wintypes.HWND
-            _u32c.ScreenToClient.argtypes = [
-                ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.POINT)]
-            _u32c.ScreenToClient.restype = ctypes.wintypes.BOOL
-            _u32c.PostMessageW.argtypes = [
-                ctypes.wintypes.HWND, ctypes.wintypes.UINT,
-                ctypes.wintypes.WPARAM, ctypes.wintypes.LPARAM]
-            _u32c.PostMessageW.restype = ctypes.wintypes.BOOL
+            from magnifier_bubble.clickthru import send_lclick_at
+            _u32c = _u32()   # argtypes already set — never mutate here
             _hwnd = self._hwnd
             cur_ex = _u32c.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
-            # Briefly make overlay transparent so WindowFromPoint finds the
-            # target below us, then restore immediately (PostMessageW is sync).
+            _saved = cur_ex & ~wc.WS_EX_TRANSPARENT
+            if self._transparent_restoring:
+                # Double-click inside the 32ms restore window — transparent is
+                # already set so just inject without re-setting it.
+                _u32c.ReleaseCapture()
+                send_lclick_at(actual_x, actual_y)
+                return
+            if self._active_menu_hwnd and not _u32c.IsWindowVisible(self._active_menu_hwnd):
+                self._active_menu_hwnd = 0
+            self._transparent_restoring = True
             _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
-            _target = _u32c.WindowFromPoint(ctypes.wintypes.POINT(actual_x, actual_y))
-            _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT)
+            _u32c.ReleaseCapture()
+            send_lclick_at(actual_x, actual_y)
+            def _restore_lclick():
+                self._transparent_restoring = False
+                _u32c.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, _saved)
+            self.root.after(32, _restore_lclick)
+            # Transfer foreground so keyboard input follows the click.
+            # WindowFromPoint at actual_x,actual_y — with overlay transparent —
+            # returns the real target below, not our canvas.
+            _target = _u32c.WindowFromPoint(wintypes.POINT(actual_x, actual_y))
             if _target and _target != _hwnd:
-                # Check window class — #32768 system menus use a modal pump
-                # that ignores PostMessageW; they need real SendInput events.
-                _cls_buf = ctypes.create_unicode_buffer(256)
-                ctypes.windll.user32.GetClassNameW(_target, _cls_buf, 256)
-                if _cls_buf.value == "#32768":
-                    _u32c.SetWindowLongW(
-                        _hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
-                    _u32c.ReleaseCapture()
-                    from magnifier_bubble.clickthru import send_lclick_at
-                    send_lclick_at(actual_x, actual_y)
-                    _saved = cur_ex
-                    self.root.after(
-                        16, lambda: _u32c.SetWindowLongW(
-                            _hwnd, wc.GWL_EXSTYLE, _saved))
-                else:
-                    _cpt = ctypes.wintypes.POINT(actual_x, actual_y)
-                    _u32c.ScreenToClient(_target, ctypes.byref(_cpt))
-                    _lp = ctypes.c_long((_cpt.y << 16) | (_cpt.x & 0xFFFF)).value
-                    _u32c.PostMessageW(_target, 0x0201, 1, _lp)  # WM_LBUTTONDOWN
-                    _u32c.PostMessageW(_target, 0x0202, 0, _lp)  # WM_LBUTTONUP
-                    # Transfer foreground to target app so keyboard input
-                    # reaches the clicked control.  Our process is
-                    # input-qualified (we just received WM_LBUTTONDOWN)
-                    # so SetForegroundWindow succeeds cross-process.
-                    # GA_ROOT=2 walks up to the top-level owner window.
-                    _u32c.GetAncestor.argtypes = [
-                        ctypes.wintypes.HWND, ctypes.c_uint]
-                    _u32c.GetAncestor.restype = ctypes.wintypes.HWND
-                    _root = _u32c.GetAncestor(_target, 2)
-                    _u32c.SetForegroundWindow(_root or _target)
+                _root = _u32c.GetAncestor(_target, 2)
+                _u32c.SetForegroundWindow(_root or _target)
 
     def _on_canvas_drag(self, event) -> None:
         """Phase 4 amended: resize drag takes precedence over move drag.
@@ -834,7 +850,7 @@ class BubbleWindow:
         popups, Explorer popups, etc.) as newly appeared windows.
         """
         popups: set = set()
-        _u32p = ctypes.windll.user32  # type: ignore[attr-defined]
+        _u32p = _u32()
         _GWL_STYLE = -16
         _WS_POPUP = 0x80000000
         WNDENUMPROC = ctypes.WINFUNCTYPE(
@@ -862,7 +878,7 @@ class BubbleWindow:
         """
         if sys.platform != "win32" or not self._hwnd:
             return
-        u32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        u32 = _u32()
 
         menu_hwnd = 0
         menu_visible = False
@@ -916,6 +932,26 @@ class BubbleWindow:
             self._canvas.itemconfig(self._image_id, image=self._photo)
         self._photo.paste(img)
 
+    def _enqueue_frame(self, img) -> None:
+        """Drop-oldest frame enqueue — called from the capture worker thread.
+
+        Uses put_nowait; if the queue is full (both slots taken by unrendered
+        frames because the main thread was busy), the oldest frame is discarded
+        so memory stays bounded (M1).  A slightly stale frame is always better
+        than unbounded queue growth.
+        """
+        try:
+            self._frame_queue.put_nowait(img)
+        except queue.Full:
+            try:
+                self._frame_queue.get_nowait()  # discard oldest
+            except queue.Empty:
+                pass
+            try:
+                self._frame_queue.put_nowait(img)
+            except queue.Full:
+                pass
+
     def start_capture(self) -> None:
         """Start the DXGI Desktop Duplication capture pipeline.
 
@@ -927,7 +963,7 @@ class BubbleWindow:
         from magnifier_bubble.capture_dxgi import DXGICaptureWorker
         self._capture_worker = DXGICaptureWorker(
             state=self.state,
-            on_frame=self._frame_queue.put,
+            on_frame=self._enqueue_frame,
         )
         self._capture_worker.start()
         self._poll_frame_queue()
@@ -1006,39 +1042,18 @@ class BubbleWindow:
             src_y = snap.y + (snap.h - snap.h / snap.zoom) / 2
             actual_x = round(src_x + event.x / snap.zoom)
             actual_y = round(src_y + (event.y - DRAG_STRIP_HEIGHT) / snap.zoom)
+            from magnifier_bubble.clickthru import send_rclick_at
             # Snapshot existing popups before injecting — new ones that appear
             # after injection are our context menu (even if not #32768 class).
             self._pre_rclick_popups = self._get_popup_hwnds()
             self._rclick_pending_ticks = 60  # scan for ~3 s
-            _u32r = ctypes.windll.user32  # type: ignore[attr-defined]
-            _u32r.WindowFromPoint.argtypes = [ctypes.wintypes.POINT]
-            _u32r.WindowFromPoint.restype = ctypes.wintypes.HWND
-            _u32r.ScreenToClient.argtypes = [
-                ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.POINT)]
-            _u32r.ScreenToClient.restype = ctypes.wintypes.BOOL
-            _u32r.PostMessageW.argtypes = [
-                ctypes.wintypes.HWND, ctypes.wintypes.UINT,
-                ctypes.wintypes.WPARAM, ctypes.wintypes.LPARAM]
-            _u32r.PostMessageW.restype = ctypes.wintypes.BOOL
+            _u32r = _u32()   # argtypes already set
             _hwnd = self._hwnd
             cur_ex = _u32r.GetWindowLongW(_hwnd, wc.GWL_EXSTYLE)
+            _saved = cur_ex & ~wc.WS_EX_TRANSPARENT
             _u32r.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex | wc.WS_EX_TRANSPARENT)
-            _target = _u32r.WindowFromPoint(
-                ctypes.wintypes.POINT(actual_x, actual_y))
-            _u32r.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, cur_ex & ~wc.WS_EX_TRANSPARENT)
-            if _target and _target != _hwnd:
-                _cpt = ctypes.wintypes.POINT(actual_x, actual_y)
-                _u32r.ScreenToClient(_target, ctypes.byref(_cpt))
-                _lp = ctypes.c_long((_cpt.y << 16) | (_cpt.x & 0xFFFF)).value
-                _u32r.PostMessageW(_target, 0x0204, 0, _lp)  # WM_RBUTTONDOWN
-                _u32r.PostMessageW(_target, 0x0205, 0, _lp)  # WM_RBUTTONUP
-                # WM_CONTEXTMENU — screen coords in lParam; explicitly requests
-                # context menu for targets (desktop shell) that don't auto-post
-                # WM_CONTEXTMENU from WM_RBUTTONDOWN/UP processing.
-                _ctx_lp = ctypes.c_long(
-                    (actual_y << 16) | (actual_x & 0xFFFF)
-                ).value
-                _u32r.PostMessageW(_target, 0x007B, _target, _ctx_lp)
+            send_rclick_at(actual_x, actual_y)
+            self.root.after(50, lambda: _u32r.SetWindowLongW(_hwnd, wc.GWL_EXSTYLE, _saved))
 
     # ---- Public teardown ----
 
@@ -1069,7 +1084,7 @@ class BubbleWindow:
                 self._poll_frame_queue_id = None
             # Phase 7: clear WS_EX_TRANSPARENT so WM_DELETE_WINDOW is delivered
             if sys.platform == "win32" and self._hwnd:
-                u32_d = ctypes.windll.user32  # type: ignore[attr-defined]
+                u32_d = _u32()
                 cur_d = u32_d.GetWindowLongW(self._hwnd, wc.GWL_EXSTYLE)
                 u32_d.SetWindowLongW(self._hwnd, wc.GWL_EXSTYLE, cur_d & ~wc.WS_EX_TRANSPARENT)
             # Phase 5 PERS-04: flush debounced config write SYNC, before

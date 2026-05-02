@@ -19,6 +19,7 @@ Structural invariants enforced by tests/test_config.py:
 """
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import sys
@@ -61,6 +62,35 @@ def _clamp_zoom(z: float) -> float:
 
 def _clamp_size(n: int | float) -> int:
     return max(_SIZE_MIN, min(_SIZE_MAX, int(n)))
+
+
+# Minimum pixels of the window that must remain on-screen after clamping.
+_ON_SCREEN_MIN: int = 100
+
+
+def _clamp_position(x: int, y: int) -> tuple[int, int]:
+    """Clamp (x, y) so at least _ON_SCREEN_MIN px of the bubble stays visible.
+
+    Uses GetSystemMetrics to read the current virtual desktop bounds so the
+    window is recoverable even after a monitor is disconnected (H5: saved
+    position not clamped to screen geometry).  Non-Windows or API failure →
+    returns (x, y) unchanged (safe default).
+    """
+    if sys.platform != "win32":
+        return x, y
+    try:
+        _gsm = ctypes.windll.user32.GetSystemMetrics  # type: ignore[attr-defined]
+        vx = int(_gsm(76))   # SM_XVIRTUALSCREEN
+        vy = int(_gsm(77))   # SM_YVIRTUALSCREEN
+        vw = int(_gsm(78))   # SM_CXVIRTUALSCREEN
+        vh = int(_gsm(79))   # SM_CYVIRTUALSCREEN
+        x = max(vx + _ON_SCREEN_MIN - _SIZE_MAX,
+                min(vx + vw - _ON_SCREEN_MIN, x))
+        y = max(vy + _ON_SCREEN_MIN - _SIZE_MAX,
+                min(vy + vh - _ON_SCREEN_MIN, y))
+    except Exception:
+        pass
+    return x, y
 
 
 # ---------------------------------------------------------------------------
@@ -152,24 +182,36 @@ def write_atomic(path: Path, snap: StateSnapshot) -> None:
     -> os.replace (Pitfall 3). If anything fails before the replace,
     the target file is untouched. After the replace, the target is
     the new content. There is no observable intermediate state.
+
+    The finally block cleans up the .tmp file if os.replace fails (M2:
+    AV scanner file lock leaves orphaned .tmp files in the dist directory).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     persisted = _to_dict(snap)
     # NamedTemporaryFile MUST be in the target's parent directory
     # so os.replace is same-volume (atomic).
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=str(path.parent),
-        prefix=path.name + ".",
-        suffix=".tmp",
-        delete=False,
-    ) as tf:
-        json.dump(persisted, tf, indent=2, sort_keys=True)
-        tf.flush()
-        os.fsync(tf.fileno())
-        tmp_name = tf.name
-    os.replace(tmp_name, str(path))
+    tmp_name: str = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=str(path.parent),
+            prefix=path.name + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as tf:
+            json.dump(persisted, tf, indent=2, sort_keys=True)
+            tf.flush()
+            os.fsync(tf.fileno())
+            tmp_name = tf.name
+        os.replace(tmp_name, str(path))
+        tmp_name = ""  # replaced successfully — OS owns the name now
+    finally:
+        if tmp_name:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass  # best-effort cleanup; a lingering .tmp is cosmetic
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +256,7 @@ def load(path: Path) -> StateSnapshot:
         zoom = _clamp_zoom(raw.get("zoom", defaults.zoom))
     except (TypeError, ValueError):
         return defaults
+    x, y = _clamp_position(x, y)
     shape = raw.get("shape", defaults.shape)
     if shape not in _VALID_SHAPES:
         shape = defaults.shape

@@ -169,12 +169,11 @@ class DXGICaptureWorker(threading.Thread):
         current_output_idx = -1  # force camera creation on first iteration
         mon_left = 0
         mon_top = 0
+        _grab_errors = 0  # consecutive grab failures → force camera recreation
 
         try:
             import dxcam
 
-            # Enumerate monitors once at thread start.  If the display
-            # configuration changes while running the user must restart.
             monitors = _enumerate_monitors()
 
             while not self._stop_ev.is_set():
@@ -194,7 +193,8 @@ class DXGICaptureWorker(threading.Thread):
                 cy = src_y + src_h // 2
                 output_idx, mon_left, mon_top = _output_for_center(cx, cy, monitors)
 
-                # Switch cameras when the bubble crosses a monitor boundary.
+                # Switch cameras when the bubble crosses a monitor boundary or
+                # after consecutive grab errors (device-lost / sleep-wake).
                 if output_idx != current_output_idx:
                     if camera is not None:
                         try:
@@ -202,6 +202,12 @@ class DXGICaptureWorker(threading.Thread):
                         except Exception:
                             pass
                         camera = None
+                    # Re-enumerate monitors on every camera recreation so that
+                    # display config changes (plugged/unplugged monitor) take
+                    # effect without a full app restart (M3).
+                    monitors = _enumerate_monitors()
+                    output_idx, mon_left, mon_top = _output_for_center(cx, cy, monitors)
+                    _grab_errors = 0
                     try:
                         camera = dxcam.create(
                             output_idx=output_idx,
@@ -257,11 +263,29 @@ class DXGICaptureWorker(threading.Thread):
                         region=(r_left, r_top, r_right, r_bottom),
                         new_frame_only=self._new_frame_only,
                     )
+                    _grab_errors = 0  # reset on success
                 except Exception as exc:
-                    print(f"[dxcam] grab error: {exc}", flush=True)
-                    remaining = self._target_dt - (time.perf_counter() - t0)
-                    if remaining > 0:
-                        self._stop_ev.wait(remaining)
+                    _grab_errors += 1
+                    print(f"[dxcam] grab error #{_grab_errors}: {exc}", flush=True)
+                    if _grab_errors >= 3:
+                        # Device-lost (sleep/wake, driver reset, monitor unplug).
+                        # Force camera recreation on next iteration by resetting
+                        # current_output_idx — the camera switch block above will
+                        # call release(), re-enumerate monitors, and recreate.
+                        print("[dxcam] forcing camera recreation after repeated errors", flush=True)
+                        if camera is not None:
+                            try:
+                                camera.release()
+                            except Exception:
+                                pass
+                            camera = None
+                        current_output_idx = -1
+                        _grab_errors = 0
+                        self._stop_ev.wait(0.5)  # brief backoff before retry
+                    else:
+                        remaining = self._target_dt - (time.perf_counter() - t0)
+                        if remaining > 0:
+                            self._stop_ev.wait(remaining)
                     continue
 
                 if frame is None:

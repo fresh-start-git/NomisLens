@@ -36,3 +36,9 @@ zoom_log.txt
 
 # Runtime theme state (written by app at runtime — not a source file)
 theme.json
+
+# Security — never commit these
+github-recovery-codes.txt
+
+# Atomic-write staging files — must never be shipped or committed
+*.tmp
